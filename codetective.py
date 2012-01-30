@@ -2,7 +2,7 @@
 # encoding: utf-8
 __description__ = 'a simple tool to determine the crypto/encoding algorithm used according to traces of its representation'
 __author__ = 'Francisco da Gama Tabanez Ribeiro'
-__version__ = '0.3'
+__version__ = '0.4'
 __date__ = '2011/12/04'
 __license__ = 'WTFPL'
 
@@ -18,15 +18,25 @@ def show(results):
 
 def get_type_of(data, filters):
 	results={'confident':[],'likely':[],'possible':[]}
-	if re.match(r"^\b[a-fA-F\d]{32}\b$", data) and 'other' in filters: # md4 or md5
-		results['likely']+=['md5']
-		results['possible']+=['md4']
-	if re.match(r"^\b[a-fA-F\d]{32}\b$", data) and 'win' in filters: # lm or ntlm
-		results['likely']+=['lm','ntlm']
-	if re.match(r"^\*\b[a-fA-F\d]{40}\b$", data) and 'db' in filters: # MySQL4+
-		results['confident']+=['MySQL4+']
+	if re.match(r"[a-fA-F\d]{32}", data): # md4 or md5
+		if(any(x for x in filters if x in ['web','other'])):
+			results['confident'].append('md5')
+			results['possible'].append('md4')
+		else:
+			results['likely'].append('md5')
+			results['possible'].append('md4')
+	if re.match(r"[a-fA-F\d]{32}", data) and 'win' in filters: # lm or ntlm
+		if(all(chr.isupper() or chr.isdigit() for chr in data)):
+			results['confident']+=['lm','ntlm']
+		else:
+			results['likely']+=['lm','ntlm']
+	if re.match(r"\*\b[a-fA-F\d]{40}\b", data) and 'db' in filters: # MySQL4+
+		if(filters[0] == 'db' and all(chr.isupper() or chr.isdigit() for chr in data)):
+			results['confident'].append('MySQL4+')
+		else:
+			results['likely'].append('MySQL4+')		
 	if re.match(r"^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=|[A-Za-z0-9+/]{4})$", data) and 'other' in filters: # base64
-		if(data.endswidth('=')):
+		if(data.endswith('=')):
 			results['confident']+=['base64']
 		else:
 			results['possible']+=['base64']
@@ -36,12 +46,12 @@ def get_type_of(data, filters):
 		else:
 			results['possible']+=['SAM(*:ntlm)']
 	if re.match(r"^[a-fA-F\d]{32}:\*\b", data) and 'win' in filters: # SAM(LM:*)
-		if(all(chr.isupper() for chr in data)):
+		if(all(chr.isupper() or chr.isdigit() for chr in data)):
 			results['confident']+=['SAM(lm:*)']
 		else:
 			results['possible']+=['SAM(lm:*)']
 	if re.match(r"^\b\w+:\d+:[a-fA-F\d]{32}:[a-fA-F\d]{32}\b", data) and 'win' in filters: # SAM(LM:NTLM)
-		if(all(chr.isupper() for chr in data)):
+		if(all(chr.isupper() or chr.isdigit() for chr in data)):
 			results['confident']+=['SAM(lm:ntlm)']
 		else:
 			results['possible']+=['SAM(lm:ntlm)']
@@ -58,29 +68,29 @@ def get_type_of(data, filters):
 	if re.match(r"\b[a-fA-F\d]{128}\b", data) and 'other' in filters: # SHA512 or Whirlpool
 		results['likely']+=['sha512','whirlpool']
 	if re.match(r"^[a-fA-F\d]{16}$", data) and 'db' in filters: # MySQL323
-		if(filters == ['db']):
+		if(filters[0] == 'db' and all(chr.isupper() or chr.isdigit() for chr in data)):
 			results['confident'].append('mysql323')
 		else:
 			results['likely'].append('mysql323')
 	if re.match(r"^0x[a-fA-F\d]{1,16}$", data) and 'other' in filters: # CRC
 		results['possible'].append('CRC')
 	if re.match(r"[a-zA-Z0-9./]{2}[a-zA-Z0-9./]{11}", data) and 'unix' in filters: # DES-salt(UNIX)
-		if(filters == ['unix']):
+		if(any(x for x in filters if x == 'unix')):
 			results['confident'].append('des-salt-unix')
 		else:
 			results['possible'].append('des-salt-unix')
 	if re.match(r"sha256\$[a-zA-Z\d\.]+\$[a-zA-Z0-9./]{64}", data) and 'web' in filters: # SHA256(Django)
-		if(filters == ['web']):
+		if(any(x for x in filters if x == 'web')):
 			results['confident'].append('sha256-django')
 		else:
 			results['likely'].append('sha256-django')
 	if re.match(r"sha384\$[a-zA-Z\d\.]+\$[a-zA-Z\d\.]{96}", data) and 'web' in filters: # SHA384(Django)
-		if(filters == ['web']):
+		if(any(x for x in filters if x == 'web')):
 			results['confident'].append('sha384-django')
 		else:
 			results['likely'].append('sha384-django')
 	if re.match(r"sha1\$[a-zA-Z\d\.]+\$[a-zA-Z\d\.]{96}", data) and 'web' in filters: # SHA1(Django)
-		if(filters == ['web']):
+		if(any(x for x in filters if x == 'web')):
 			results['confident'].append('sha1-django')
 		else:
 			results['likely'].append('sha1-django')
@@ -95,12 +105,12 @@ def get_type_of(data, filters):
 	if re.match(r"\$H\$[a-zA-Z0-9./]{31}$", data) and 'web' in filters:  # MD5(phpBB3)
 		results['confident'].append('md5-phpBB3')
 	if re.match(r"^[a-zA-Z0-9./]{32}:[a-zA-Z0-9./]{32}$", data) and 'web' in filters:  # MD5-salt(joomla2)
-		if(filters == ['web']):
+		if(any(x for x in filters if x == 'web')):
 			results['confident'].append('md5-salt-joomla2')
 		else:
 			results['likely'].append('md5-salt-joomla2')
 	if re.match(r"^[a-zA-Z0-9./]{32}:[a-zA-Z0-9./]{16}$", data) and 'web' in filters:  # MD5-salt(joomla1)
-		if(filters == ['web']):
+		if(any(x for x in filters if x == 'web')):
 			results['confident'].append('md5-salt-joomla1')
 		else:
 			results['likely'].append('md5-salt-joomla1')
