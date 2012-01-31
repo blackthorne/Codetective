@@ -208,7 +208,8 @@ if __name__ == '__main__':
 		for line in fl.readlines():
 			results,result_details = get_type_of(line, args.filters)
 			print "%s : %s" % (line.strip('\n'), results)
-			print result_details or 'No details available'
+			for detail in result_details.keys():
+				print '\t',result_details[detail]
 		fl.close()
 	else:
 		parser.print_help()
