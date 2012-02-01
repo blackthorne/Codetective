@@ -136,26 +136,26 @@ def get_type_of(data, filters, analyze=False):
 		else:
 			results['likely'].append('sha384-django')
 	if re.findall(r"\$5\$[a-zA-Z0-9./]{8,16}\$[a-zA-Z0-9./]{43}", data) and 'unix' in filters: # SHA256-salt(UNIX)
-		result_details['sha256-salt-unix']='UNIX shadow file using salted SHA256 - salt: %s\thash: %s' % re.findall(r"\$5\$([a-zA-Z0-9./]{8,16})\$([a-zA-Z0-9./]{43})", data)
+		result_details['sha256-salt-unix']='UNIX shadow file using salted SHA256 - salt:%s\thash:%s' % re.findall(r"\$5\$([a-zA-Z0-9./]{8,16})\$([a-zA-Z0-9./]{43})", data)
 		results['confident'].append('sha256-salt-unix')
 	if re.findall(r"\$6\$[a-zA-Z0-9./]{8,16}\$[a-zA-Z0-9./]{86}", data) and 'unix' in filters: # SHA512-salt(UNIX)
-		result_details['sha512-salt-unix']='UNIX shadow file using salted SHA512 - salt: %s\thash: %s' % re.findall(r"\$6\$([a-zA-Z0-9./]{8,16})\$([a-zA-Z0-9./]{86})", data)
+		result_details['sha512-salt-unix']='UNIX shadow file using salted SHA512 - salt:%s\thash:%s' % re.findall(r"\$6\$([a-zA-Z0-9./]{8,16})\$([a-zA-Z0-9./]{86})", data)
 		results['confident'].append('sha512-salt-unix')
 	if re.findall(r"\$apr1\$[a-zA-Z0-9./]{8}\$[a-zA-Z0-9./]{22}", data) and 'unix' in filters: # APR1-salt(Apache)
-		result_details['apr1-salt-unix']='Apache htpasswd file (MD5x2000)- salt: %s\thash: %s' % re.findall(r"\$apr1\$([a-zA-Z0-9./]{8})\$([a-zA-Z0-9./]{22})", data)[0]
+		result_details['apr1-salt-unix']='Apache htpasswd file (MD5x2000)- salt:%s\thash:%s' % re.findall(r"\$apr1\$([a-zA-Z0-9./]{8})\$([a-zA-Z0-9./]{22})", data)[0]
 		results['confident'].append('apr1-salt-unix')
-	if re.findall(r"[a-zA-Z0-9./]{8}\$[a-zA-Z0-9./]{22}", data) and 'unix' in filters: # MD5-salt(UNIX)
-		result_details['md5-salt-unix']='UNIX shadow file using salted MD5 - salt: %s\thash: %s' % re.findall(r"([a-zA-Z0-9./]{8})\$([a-zA-Z0-9./]{22})", data)[0]
+	if re.findall(r"\b[a-zA-Z0-9./]{8}\$[a-zA-Z0-9./]{22}\b", data) and 'unix' in filters: # MD5-salt(UNIX)
+		result_details['md5-salt-unix']='UNIX shadow file using salted MD5 - salt:%s\thash:%s' % re.findall(r"([a-zA-Z0-9./]{8})\$([a-zA-Z0-9./]{22})", data)[0]
 		results['confident'].append('md5-salt-unix')
-	if re.findall(r"[a-zA-Z0-9./]{31}$", data) and 'web' in filters:  # MD5(Wordpress)
-		result_details['md5-wordpress']='Wordpress MD5 - hash: %s' % re.findall("([a-zA-Z0-9./]{31})$", data)[0]
+	if re.findall(r"\b[a-zA-Z0-9./]{31}\b", data) and 'web' in filters:  # MD5(Wordpress)
+		result_details['md5-wordpress']='Wordpress MD5 - hash:%s' % re.findall("([a-zA-Z0-9./]{31})$", data)[0]
 		if re.match(r"\$P\$[a-zA-Z0-9./]{31}$", data):
 			results['confident'].append('md5-wordpress')
 		elif filters == ['web'] and data.startswith('$'):
 			results['likely'].append('md5-wordpress')
 		else:
 			results['possible'].append('md5-wordpress')
-	if re.findall(r"[a-zA-Z0-9./]{31}$", data) and 'web' in filters:  # MD5(phpBB3)
+	if re.findall(r"\b[a-zA-Z0-9./]{31}\b", data) and 'web' in filters:  # MD5(phpBB3)
 		result_details['md5-phpBB3']='phpBB3 MD5 - hash: %s' % re.findall("[a-zA-Z0-9./]{31}$", data)[0]
 		if re.match(r"\$H\$[a-zA-Z0-9./]{31}$", data):
 			results['confident'].append('md5-phpBB3')
