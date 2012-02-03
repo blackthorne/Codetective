@@ -2,13 +2,13 @@
 # encoding: utf-8
 __description__ = 'a simple tool to determine the crypto/encoding algorithm used according to traces of its representation'
 __author__ = 'Francisco da Gama Tabanez Ribeiro'
-__version__ = '0.5'
+__version__ = '0.6'
 __date__ = '2011/12/04'
 __license__ = 'WTFPL'
 
 import re,sys,argparse,base64
 
-def show(results, result_details, code, analyze=False):
+def show(results, result_details, code, analyze=False, textmode=True):
 	for key in results.keys():
 		if(len(results[key]) > 0):
 			print '%s:' % key,results[key]
@@ -17,7 +17,7 @@ def show(results, result_details, code, analyze=False):
 					print '\t',result_details[codetype]
 	if(len(results['confident']) + len(results['likely']) + len(results['possible']) == 0):
 		print 'unknown! ;('
-
+#(?<![a-zA-Z0-9./$])
 def get_type_of(data, filters, analyze=False):
 	results={'confident':[],'likely':[],'possible':[]}
 	result_details={}
@@ -33,13 +33,13 @@ def get_type_of(data, filters, analyze=False):
 			results['confident']+=['lm','ntlm']
 		else:
 			results['likely']+=['lm','ntlm']
-	if re.findall(r"\*\b[a-fA-F\d]{40}\b", data) and 'db' in filters: # MySQL4+
+	if re.findall(r"\*[a-fA-F\d]{40}\b", data) and 'db' in filters: # MySQL4+
 		result_details['MySQL4+']='MySQL v4 or later hash: %s' % re.findall(r"\*(\b[a-fA-F\d]{40})\b", data)
 		if(all(chr.isupper() or chr.isdigit() for chr in data)):
 			results['confident'].append('MySQL4+')
 		else:
 			results['likely'].append('MySQL4+')		
-	if re.match(r"^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=|[A-Za-z0-9+/]{4})$", data) and 'other' in filters: # base64
+	if re.findall(r"^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=|[A-Za-z0-9+/]{4})$", data) and 'other' in filters: # base64
 		result_details['base64']='base64 decoded string: %s' % base64.b64decode(data)
 		if(data.endswith('=')):
 			results['confident']+=['base64']
@@ -67,11 +67,11 @@ def get_type_of(data, filters, analyze=False):
 			results['confident']+=['SAM(lm:ntlm)']
 		else:
 			results['possible']+=['SAM(lm:ntlm)']
-	if re.findall(r"^\b[a-fA-F\d]{80}\b$", data) and 'other' in filters: # RipeMD320
+	if re.findall(r"\b[a-fA-F\d]{80}\b", data) and 'other' in filters: # RipeMD320
 		results['possible'].append('RipeMD320')
-	if re.findall(r"^\b[a-fA-F\d]{40}\b$", data) and 'other' in filters: # SHA1
+	if re.findall(r"\b[a-fA-F\d]{40}\b", data) and 'other' in filters: # SHA1
 		results['likely'].append('sha1')
-	if re.findall(r"^\b[a-fA-F\d]{56}\b$",data) and 'other' in filters: # SHA224
+	if re.findall(r"\b[a-fA-F\d]{56}\b",data) and 'other' in filters: # SHA224
 		results['likely'].append('sha224')
 	if re.findall(r"\b[a-fA-F\d]{64}\b", data) and 'other' in filters: # SHA256
 		results['likely'].append('sha256')
@@ -85,7 +85,7 @@ def get_type_of(data, filters, analyze=False):
 			results['confident'].append('mysql323')
 		else:
 			results['likely'].append('mysql323')
-	if re.findall(r"0x[a-fA-F\d]{1,16}", data) and 'other' in filters: # CRC
+	if re.findall(r"0x[a-fA-F\d]{1,16}\b", data) and 'other' in filters: # CRC
 		if len(data[2:]) == 1:
 			result_details['CRC']='Cyclic redundancy check: CRC1 or CRC-4-ITU'
 		elif len(data[2:]) == 2:
@@ -105,14 +105,14 @@ def get_type_of(data, filters, analyze=False):
 		else: 
 			result_details['CRC']='invalid CRC? truncated data?'
 		results['possible'].append('CRC')
-	if re.findall(r"\b(?<!\$)[a-zA-Z0-9./]{13}\b", data) and 'unix' in filters: # DES-salt(UNIX)
-		result_details['des-salt-unix']='UNIX shadow file using salted DES - salt:%s\thash:%s' % re.findall(r"(?:\w+:)?([a-zA-Z0-9./]{2})([a-zA-Z0-9./]{11})\b",data)[0]	
+	if re.findall(r"(?<![a-zA-Z0-9./$])[a-zA-Z0-9./]{13}(?![a-zA-Z0-9./])", data) and 'unix' in filters: # DES-salt(UNIX)
+		result_details['des-salt-unix']='UNIX shadow file using salted DES - salt:%s\thash:%s' % re.findall(r"(?:\w+:)?([a-zA-Z0-9./]{2})([a-zA-Z0-9./]{11})",data)[0]	
 		if(filters == ['unix'] or re.match(r'(?:\w+:)[a-zA-Z0-9./]{13}(?::\d*){2}(?::.*?){2}:.*$', data)):
 			results['confident'].append('des-salt-unix')
 		else:
 			results['possible'].append('des-salt-unix')
-	if re.findall(r"^(?:sha256|sha1)\$[a-zA-Z\d\.]+\$[a-zA-Z0-9./]{64}$", data) and 'web' in filters: # SHA256-salt(Django)
-		result_details['sha256-salt-django']='Django shadow file using salted SHA256 - salt:%s\thash:%s' % re.findall(r"^(?:sha256|sha1)\$([a-zA-Z\d\.]+)\$([a-zA-Z0-9./]{64})$", data)[0]
+	if re.findall(r"^(?:sha256|sha1)\$[a-zA-Z\d./]+\$[a-zA-Z0-9./]{64}$", data) and 'web' in filters: # SHA256-salt(Django)
+		result_details['sha256-salt-django']='Django shadow file using salted SHA256 - salt:%s\thash:%s' % re.findall(r"^(?:sha256|sha1)\$([a-zA-Z\d.]+)\$([a-zA-Z0-9./]{64})$", data)[0]
 		if(all(chr.islower() or chr.isdigit() or chr == '$' for chr in data)):
 			results['confident'].append('sha256-salt-django')
 		else:
@@ -123,8 +123,8 @@ def get_type_of(data, filters, analyze=False):
 			results['confident'].append('sha256-django')
 		else:
 			results['likely'].append('sha256-django')
-	if re.findall(r"^sha384\$[a-zA-Z\d\.]+\$[a-zA-Z0-9./]{96}$", data) and 'web' in filters: # SHA384-salt(Django)
-		result_details['sha384-salt-django']='Django shadow file using salted SHA384 - salt:%s\thash:%s' % re.findall(r"^sha384\$([a-zA-Z\d\.]+)\$([a-zA-Z0-9./]{96})$", data)[0]
+	if re.findall(r"^sha384\$[a-zA-Z\d.]+\$[a-zA-Z0-9./]{96}$", data) and 'web' in filters: # SHA384-salt(Django)
+		result_details['sha384-salt-django']='Django shadow file using salted SHA384 - salt:%s\thash:%s' % re.findall(r"^sha384\$([a-zA-Z\d.]+)\$([a-zA-Z0-9./]{96})$", data)[0]
 		if(all(chr.islower() or chr.isdigit() or chr == '$' for chr in data)):
 			results['confident'].append('sha384-salt-django')
 		else:
@@ -135,19 +135,19 @@ def get_type_of(data, filters, analyze=False):
 			results['confident'].append('sha384-django')
 		else:
 			results['likely'].append('sha384-django')
-	if re.findall(r"\$5\$[a-zA-Z0-9./]{8,16}\$[a-zA-Z0-9./]{43}", data) and 'unix' in filters: # SHA256-salt(UNIX)
+	if re.findall(r"\$5\$[a-zA-Z0-9./]{8,16}\$[a-zA-Z0-9./]{43}(?![a-zA-Z0-9./])", data) and 'unix' in filters: # SHA256-salt(UNIX)
 		result_details['sha256-salt-unix']='UNIX shadow file using salted SHA256 - salt:%s\thash:%s' % re.findall(r"\$5\$([a-zA-Z0-9./]{8,16})\$([a-zA-Z0-9./]{43})", data)
 		results['confident'].append('sha256-salt-unix')
-	if re.findall(r"\$6\$[a-zA-Z0-9./]{8,16}\$[a-zA-Z0-9./]{86}", data) and 'unix' in filters: # SHA512-salt(UNIX)
+	if re.findall(r"\$6\$[a-zA-Z0-9./]{8,16}\$[a-zA-Z0-9./]{86}(?![a-zA-Z0-9./])", data) and 'unix' in filters: # SHA512-salt(UNIX)
 		result_details['sha512-salt-unix']='UNIX shadow file using salted SHA512 - salt:%s\thash:%s' % re.findall(r"\$6\$([a-zA-Z0-9./]{8,16})\$([a-zA-Z0-9./]{86})", data)
 		results['confident'].append('sha512-salt-unix')
-	if re.findall(r"\$apr1\$[a-zA-Z0-9./]{8}\$[a-zA-Z0-9./]{22}", data) and 'unix' in filters: # APR1-salt(Apache)
+	if re.findall(r"\$apr1\$[a-zA-Z0-9./]{8}\$[a-zA-Z0-9./]{22}(?![a-zA-Z0-9./])", data) and 'unix' in filters: # APR1-salt(Apache)
 		result_details['apr1-salt-unix']='Apache htpasswd file (MD5x2000)- salt:%s\thash:%s' % re.findall(r"\$apr1\$([a-zA-Z0-9./]{8})\$([a-zA-Z0-9./]{22})", data)[0]
 		results['confident'].append('apr1-salt-unix')
-	if re.findall(r"\b[a-zA-Z0-9./]{8}\$[a-zA-Z0-9./]{22}\b", data) and 'unix' in filters: # MD5-salt(UNIX)
+	if re.findall(r"(?<![a-zA-Z0-9.])[a-zA-Z0-9./]{8}\$[a-zA-Z0-9./]{22}(?![a-zA-Z0-9./])", data) and 'unix' in filters: # MD5-salt(UNIX)
 		result_details['md5-salt-unix']='UNIX shadow file using salted MD5 - salt:%s\thash:%s' % re.findall(r"([a-zA-Z0-9./]{8})\$([a-zA-Z0-9./]{22})", data)[0]
 		results['confident'].append('md5-salt-unix')
-	if re.findall(r"\b[a-zA-Z0-9./]{31}\b", data) and 'web' in filters:  # MD5(Wordpress)
+	if re.findall(r"(?<![a-zA-Z0-9.])[a-zA-Z0-9./]{31}(?![a-zA-Z0-9./])", data) and 'web' in filters:  # MD5(Wordpress)
 		result_details['md5-wordpress']='Wordpress MD5 - hash:%s' % re.findall("([a-zA-Z0-9./]{31})$", data)[0]
 		if re.match(r"\$P\$[a-zA-Z0-9./]{31}$", data):
 			results['confident'].append('md5-wordpress')
@@ -155,7 +155,7 @@ def get_type_of(data, filters, analyze=False):
 			results['likely'].append('md5-wordpress')
 		else:
 			results['possible'].append('md5-wordpress')
-	if re.findall(r"\b[a-zA-Z0-9./]{31}\b", data) and 'web' in filters:  # MD5(phpBB3)
+	if re.findall(r"(?<![a-zA-Z0-9.])[a-zA-Z0-9./]{31}(?![a-zA-Z0-9./])", data) and 'web' in filters:  # MD5(phpBB3)
 		result_details['md5-phpBB3']='phpBB3 MD5 - hash: %s' % re.findall("[a-zA-Z0-9./]{31}$", data)[0]
 		if re.match(r"\$H\$[a-zA-Z0-9./]{31}$", data):
 			results['confident'].append('md5-phpBB3')
@@ -163,27 +163,30 @@ def get_type_of(data, filters, analyze=False):
 			results['likely'].append('md5-phpBB3')
 		else:
 			results['possible'].append('md5-phpBB3')
-	if re.match(r"\b([a-zA-Z0-9./]{32})(?::[a-zA-Z0-9./]{32}\b)?", data) and 'web' in filters:  # MD5-salt(joomla2)
-		if(re.findall(r"\b([a-z0-9./]{32}):([a-zA-Z0-9./]{32})\b", data)):
+	if re.match(r"(?<![a-zA-Z0-9.])([a-zA-Z0-9./]{32})(?::[a-zA-Z0-9./]{32})?(?![a-zA-Z0-9./])", data) and 'web' in filters:  # MD5-salt(joomla2)
+		if(re.findall(r"(?<![a-zA-Z0-9.])([a-z0-9./]{32}):([a-zA-Z0-9./]{32})\b", data)):
 			result_details['md5-salt-joomla2']='Joomla v2 salted MD5 - hash:%s\tsalt:%s' % re.findall(r"([a-z0-9./]{32}):([a-zA-Z0-9./]{32})", data)[0]
 			results['confident'].append('md5-salt-joomla2')
-		elif(re.findall(r"\b([a-z0-9./]{32})\b", data)):
+		elif(re.findall(r"(?<![a-zA-Z0-9.])([a-z0-9./]{32})\b", data)):
 			result_details['md5-joomla2']='Joomla v2 MD5 - hash:%s' % re.findall(r"([a-z0-9./]{32})", data)[0]
 			results['likely'].append('md5-joomla2')
 #		else:
 #			results['possible'].append('md5-salt-joomla2')
-	if re.findall(r"\b([a-zA-Z0-9./]{32}\b)(?::[a-zA-Z0-9./]{16}\b)?", data) and 'web' in filters:  # MD5-salt(joomla1)
-		if(re.findall(r"([a-z0-9./]{32}):([a-zA-Z0-9./]{16})", data)):
+	if re.findall(r"(?<![a-zA-Z0-9.])([a-zA-Z0-9./]{32})(?::[a-zA-Z0-9./]{16})?(?![a-zA-Z0-9./])", data) and 'web' in filters:  # MD5-salt(joomla1)
+		if(re.findall(r"(?<![a-zA-Z0-9.])([a-z0-9./]{32}):([a-zA-Z0-9./]{16}(?![a-zA-Z0-9./]))", data)):
 			result_details['md5-salt-joomla1']='Joomla v1 salted MD5 - hash:%s\tsalt:%s' % re.findall(r"([a-z0-9./]{32}):([a-zA-Z0-9./]{16})", data)[0]
 			results['confident'].append('md5-salt-joomla1')
-		elif(re.findall(r"\b([a-z0-9./]{32})\b", data)):
+		elif(re.findall(r"(?<![a-zA-Z0-9.])([a-z0-9./]{32})(?![a-zA-Z0-9./])", data)):
 			result_details['md5-joomla1']='Joomla v1 MD5 - hash:%s' % re.findall(r"([a-z0-9./]{32})", data)[0]
 			results['likely'].append('md5-joomla1')
 #		else:
 #			results['possible'].append('md5-salt-joomla1')	
-	if re.findall(r"\$(?:2a|2)\$[a-zA-Z0-9./]{2}\$[a-zA-Z0-9./]{53}", data) and 'unix' in filters:  # Blowfish(UNIX)
+	if re.findall(r"[a-zA-Z0-9./]{2}\$[a-zA-Z0-9./]{53}(?![a-zA-Z0-9./])", data) and 'unix' in filters:  # Blowfish(UNIX)
 		result_details['blowfish-salt-unix']='UNIX shadow file using salted Blowfish - salt: %s\thash: %s' % re.findall(r"\$(?:2a|2)\$([a-zA-Z0-9./]{2})\$([a-zA-Z0-9./]{53})", data)[0]
-		results['confident'].append('blowfish-salt-unix')
+		if re.findall(r"\$(?:2a|2)\$[a-zA-Z0-9./]{2}\$[a-zA-Z0-9./]{53}\$?", data):
+			results['confident'].append('blowfish-salt-unix')
+		else:
+			results['likely'].append('blowfish-salt-unix')
 	return results,result_details
 
 		
@@ -208,8 +211,9 @@ if __name__ == '__main__':
 		for line in fl.readlines():
 			results,result_details = get_type_of(line, args.filters)
 			print "%s : %s" % (line.strip('\n'), results)
-			for detail in result_details.keys():
-				print '\t',result_details[detail]
+			if args.analyze:
+				for detail in result_details.keys():
+					print '\t',result_details[detail]
 		fl.close()
 	else:
 		parser.print_help()
