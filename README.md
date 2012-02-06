@@ -68,26 +68,26 @@ Examples
 Usage
 -----
 
-usage: codetective.py [-h] [-t filters] [-a] [-f FILENAME] [-l] [string]
+	usage: codetective.py [-h] [-t filters] [-a] [-f FILENAME] [-l] [string]
 
-a simple tool to determine the crypto/encoding algorithm used according to
-traces of its representation
+	a simple tool to determine the crypto/encoding algorithm used according to
+	traces of its representation
 
-positional arguments:
-  string                determine algorithm used for <string> according to its
+	positional arguments:
+	  string                determine algorithm used for <string> according to its
                         data representation
 
-optional arguments:
-  -h, --help            show this help message and exit
-  -t filters            filter by source of your string. can be: win, web, db,
-                        unix or other
-  -a, -analyze          show more details whenever possible (expands shadow
-                        files fields,...)
-  -f FILENAME, -file FILENAME
-                        load a file
-  -l, -list             lists supported algorithms
+	optional arguments:
+	  -h, --help            show this help message and exit
+	  -t filters            filter by source of your string. can be: win, web, db,
+    	                    unix or other
+	  -a, -analyze          show more details whenever possible (expands shadow
+   	                     files fields,...)
+	  -f FILENAME, -file FILENAME
+        	                load a file
+	  -l, -list             lists supported algorithms
 
-use filters for more accurate results
+	use filters for more accurate results
 
 
 Requirements
@@ -103,6 +103,6 @@ This script is heavily based on regular expressions done with a mindset of rejec
 Notice that this tool also infers on the confidence level relative to each guess and it's able to give you a preliminary analyze (-a). 
 
 Notice that results improve with filters (-f) that can be specified so if you know that the source of the file is related to the web, Codetective will have more confidence when trying to determine the source of code when considering web applications frameworks such as Joomla or Django. 
-If you find this tool usefel, know that there is other called [[Hash Identifier http://code.google.com/p/hash-identifier/]]  that works in a different way that may also be helpful to you.
+If you find this tool usefel, know that there is other called [Hash Identifier] (http://code.google.com/p/hash-identifier/)  that works in a different way that may also be helpful to you.
 
 Finally, when passing strings from the command-line, always wrap your input string with '' (at least, if you're using bash) so that special characters such as '!' don't mess up with the input before it gets processed by Codetective.
