@@ -12,9 +12,10 @@ def show(results, result_details, code, analyze=False, textmode=True):
 	for key in results.keys():
 		if(len(results[key]) > 0):
 			print '%s:' % key,results[key]
-			for codetype in results[key]:
-				if codetype in result_details.keys():
-					print '\t',result_details[codetype]
+			if analyze:
+				for codetype in results[key]:
+					if codetype in result_details.keys():
+						print '\t',result_details[codetype]
 	if(len(results['confident']) + len(results['likely']) + len(results['possible']) == 0):
 		print 'unknown! ;('
 #(?<![a-zA-Z0-9./$])
