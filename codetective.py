@@ -29,7 +29,7 @@ def get_type_of(data, filters, analyze=False):
 		else:
 			results['likely'].append('md5')
 			results['possible'].append('md4')
-	if re.findall(r"\b[a-fA-F\d]{32}\b", data) and 'win' in filters: # lm or ntlm
+	if re.findall(r"\b[a-fA-F\d]{32}(?![a-fA-F0-9])", data) and 'win' in filters: # lm or ntlm
 		if(all(chr.isupper() or chr.isdigit() for chr in data)):
 			results['confident']+=['lm','ntlm']
 		else:
@@ -46,22 +46,22 @@ def get_type_of(data, filters, analyze=False):
 			results['confident']+=['base64']
 		else:
 			results['possible']+=['base64']
-	if re.findall(r"^(\w+:\d+:)?\*:[a-fA-F\d]{32}", data) and 'win' in filters: # SAM(*:NTLM)
-		result_details['SAM(*:ntlm)']='hashes in SAM file - NT:not defined\tNTLM:%s' % re.match(r"^\w+:\d+:?\*:([a-fA-F\d]{32})",data).group(1)
-		if(all(chr.isupper() for chr in data)):
+	if re.findall(r"^(\w+:\d+:)?\*:([a-fA-F\d]{32})(?![a-fA-F0-9])", data) and 'win' in filters: # SAM(*:NTLM)
+		result_details['SAM(*:ntlm)']='hashes in SAM file - LM:not defined\tNTLM:%s' % re.findall(r"\*:([a-fA-F\d]{32})\b",data)[0]
+		if(all(chr.isupper() or chr.isdigit() for chr in re.findall(r"\*:([a-fA-F\d]{32})\b",data)[0])):
 			results['confident']+=['SAM(*:ntlm)']
 		else:
 			results['possible']+=['SAM(*:ntlm)']
 	if re.findall(r"^(\w+:\d+:)?[a-fA-F\d]{32}:\*", data) and 'win' in filters: # SAM(LM:*)
-		result_details['SAM(lm:*)']='hashes in SAM file - LM:%s\tNTLM:not defined' % re.match(r"^\w+:\d+:?([a-fA-F\d]{32}):\*",data).group(1)		
-		if(all(chr.isupper() or chr.isdigit() for chr in data)):
+		result_details['SAM(lm:*)']='hashes in SAM file - LM:%s\tNTLM:not defined' % re.findall(r"([a-fA-F\d]{32}):\*",data)[0]		
+		if(all(chr.isupper() or chr.isdigit() for chr in re.findall(r"([a-fA-F\d]{32}):\*",data)[0])):
 			results['confident']+=['SAM(lm:*)']
 		elif(re.match(r"^[\w+:]{4,6}", data)):
 			results['confident']+=['SAM(lm:*)']
 		else:
 			results['possible']+=['SAM(lm:*)']
 	if re.findall(r"^(\w+:\d+:)?[a-fA-F\d]{32}:[a-fA-F\d]{32}\b", data) and 'win' in filters: # SAM(LM:NTLM)
-		result_details['SAM(lm:ntlm)']='hashes in SAM file - LM:%s\tNTLM:%s' % re.match(r"^\w+:\d+:?([a-fA-F\d]{32}):([a-fA-F\d]{32})\b",data).groups()	
+		result_details['SAM(lm:ntlm)']='hashes in SAM file - LM:%s\tNTLM:%s' % re.findall(r"^(?:\w+:\d+:)?([a-fA-F\d]{32}):([a-fA-F\d]{32})\b",data)[0]
 		if(all(chr.isupper() or chr.isdigit() or chr == '$' for chr in data)):
 			results['confident']+=['SAM(lm:ntlm)']
 		elif(re.match(r"^[\w+:]{4}", data)):
