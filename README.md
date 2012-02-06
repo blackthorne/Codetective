@@ -62,7 +62,7 @@ Examples
         	Joomla v1 salted MD5 - hash:4aad84c0929c72f1c72a9c884e5c0f18    salt:tNT52oL0I8ClmMjO
 	****:1ad6692b7e3b2deb36606603ced0c8b6:LhiqX4pL3s8xy0qd  : {'confident': ['md5', 'md5-salt-joomla1'], 'likely': ['lm', 'ntlm'], 'possible': ['md4']}
         	Joomla v1 salted MD5 - hash:1ad6692b7e3b2deb36606603ced0c8b6    salt:LhiqX4pL3s8xy0qd
-dGVzdGUK : {'confident': [], 'likely': [], 'possible': ['base64']}
+	dGVzdGUK : {'confident': [], 'likely': [], 'possible': ['base64']}
         	base64 decoded string: teste
 
 Usage
