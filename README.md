@@ -39,7 +39,7 @@ Examples
 	ibrahim:$1$hanhd/cF$3lzrzB14HceT7uc3oTmog1:14323:0:99999:7::: : {'confident': ['md5-salt-unix'], 'likely': [], 'possible': []}
         	UNIX shadow file using salted MD5 - salt:hanhd/cF       hash:3lzrzB14HceT7uc3oTmog1
 	563DE3D2F07D0747BBE4BA2697AE33AA : {'confident': ['md5'], 'likely': ['lm', 'ntlm'], 'possible': ['md4', 'base64']}
-????p   base64 decoded string: ??p?N?Ӿ;8
+		base64 decoded string: ??p?N?Ӿ;8
 	463C8A7593A8A79078CB5C119424E62A : {'confident': ['md5'], 'likely': ['lm', 'ntlm'], 'possible': ['md4', 'base64']}
         	base64 decoded string: ?????p<?t????-u?????
 	E852191079EA08B654CCF4C2F38A162E3E84EE04 : {'confident': [], 'likely': ['sha1'], 'possible': ['base64']}
