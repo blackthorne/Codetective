@@ -106,6 +106,12 @@ def get_type_of(data, filters, analyze=False):
 		else: 
 			result_details['CRC']='invalid CRC? truncated data?'
 		results['possible'].append('CRC')
+	if re.findall(r"\b[a-fA-f0-9./]{8}-[a-fA-f0-9./]{4}-[a-fA-f0-9./]{4}-[a-fA-f0-9./]{4}-[a-fA-f0-9./]{12}\b", data) and 'web' in filters: #JSESSIONID
+		result_details['JSession-ID']='Java Session ID:%s' % re.findall(r"([a-fA-f0-9./]{8}-[a-fA-f0-9./]{4}-[a-fA-f0-9./]{4}-[a-fA-f0-9./]{4}-[a-fA-f0-9./]{12})", data)[0]
+		if re.findall(r"^([a-f0-9./]{8}-[a-f0-9./]{4}-[a-f0-9./]{4}-[a-f0-9./]{4}-[a-f0-9./]{12})$", data):
+			results['confident'].append('JSession-ID')
+		else:
+			results['possible'].append('JSession-ID')
 	if re.findall(r"(?<![a-zA-Z0-9./$])[a-zA-Z0-9./]{13}(?![a-zA-Z0-9./])", data) and 'unix' in filters: # DES-salt(UNIX)
 		result_details['des-salt-unix']='UNIX shadow file using salted DES - salt:%s\thash:%s' % re.findall(r"(?:\w+:)?([a-zA-Z0-9./]{2})([a-zA-Z0-9./]{11})",data)[0]	
 		if(filters == ['unix'] or re.match(r'(?:\w+:)[a-zA-Z0-9./]{13}(?::\d*){2}(?::.*?){2}:.*$', data)):
@@ -203,7 +209,7 @@ if __name__ == '__main__':
 	parser.add_argument('-l','-list', dest='list', help='lists supported algorithms', required=False, action='store_true')
 	args=parser.parse_args()
 	if(args.list): 
-		print "shadow and SAM files, phpBB3, Wordpress, Joomla, CRC, LM, NTLM, MD4, MD5, Apr, SHA1, SHA256, base64, MySQL323, MYSQL4+, DES, RipeMD320, Whirlpool, SHA1, SHA224, SHA256, SHA384, SHA512, Blowfish"
+		print "shadow and SAM files, phpBB3, Wordpress, Joomla, CRC, LM, NTLM, MD4, MD5, Apr, SHA1, SHA256, base64, MySQL323, MYSQL4+, DES, RipeMD320, Whirlpool, SHA1, SHA224, SHA256, SHA384, SHA512, Blowfish, Java Session IDs"
 	elif(args.string is not None):
 		results,result_details = get_type_of(args.string, args.filters)
 		show(results, result_details, args.string, args.analyze)
