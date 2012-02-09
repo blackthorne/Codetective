@@ -203,15 +203,7 @@ if __name__ == '__main__':
 	parser.add_argument('-l','-list', dest='list', help='lists supported algorithms', required=False, action='store_true')
 	args=parser.parse_args()
 	if(args.list): 
-<<<<<<< HEAD
-<<<<<<< HEAD
-		print "shadow and SAM files, phpBB3, Wordpress, Joomla, CRC, LM, nt, MD4, MD5, Apr, SHA1, SHA256, base64, MySQL323, MYSQL4+, DES, RipeMD320, Whirlpool, SHA1, SHA224, SHA256, SHA384, SHA512, Blowfish, Java Session IDs"
-=======
-		print "shadow and SAM files, phpBB3, Wordpress, Joomla, CRC, LM, NTLM, MD4, MD5, Apr, SHA1, SHA256, base64, MySQL323, MYSQL4+, DES, RipeMD320, Whirlpool, SHA1, SHA224, SHA256, SHA384, SHA512, Blowfish"
->>>>>>> parent of 3360a19... added support for Java Session IDs
-=======
 		print "shadow and SAM files, phpBB3, Wordpress, Joomla, CRC, LM, NTLM, MD4, MD5, Apr, SHA1, SHA256, base64, MySQL323, MYSQL4+, DES, RipeMD320, Whirlpool, SHA1, SHA224, SHA256, SHA384, SHA512, Blowfish, Java Session IDs"
->>>>>>> parent of 98e1487... naming fix on NT hashes
 	elif(args.string is not None):
 		results,result_details = get_type_of(args.string, args.filters)
 		show(results, result_details, args.string, args.analyze)
