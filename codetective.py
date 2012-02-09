@@ -29,11 +29,11 @@ def get_type_of(data, filters, analyze=False):
 		else:
 			results['likely'].append('md5')
 			results['possible'].append('md4')
-	if re.findall(r"\b[a-fA-F\d]{32}(?![a-fA-F0-9])", data) and 'win' in filters: # lm or ntlm
+	if re.findall(r"\b[a-fA-F\d]{32}(?![a-fA-F0-9])", data) and 'win' in filters: # lm or nt
 		if(all(chr.isupper() or chr.isdigit() for chr in data)):
-			results['confident']+=['lm','ntlm']
+			results['confident']+=['lm','nt']
 		else:
-			results['likely']+=['lm','ntlm']
+			results['likely']+=['lm','nt']
 	if re.findall(r"\*[a-fA-F\d]{40}\b", data) and 'db' in filters: # MySQL4+
 		result_details['MySQL4+']='MySQL v4 or later hash: %s' % re.findall(r"\*(\b[a-fA-F\d]{40})\b", data)
 		if(all(chr.isupper() or chr.isdigit() for chr in data)):
@@ -46,28 +46,28 @@ def get_type_of(data, filters, analyze=False):
 			results['confident']+=['base64']
 		else:
 			results['possible']+=['base64']
-	if re.findall(r"^(\w+:\d+:)?\*:([a-fA-F\d]{32})(?![a-fA-F0-9])", data) and 'win' in filters: # SAM(*:NTLM)
-		result_details['SAM(*:ntlm)']='hashes in SAM file - LM:not defined\tNTLM:%s' % re.findall(r"\*:([a-fA-F\d]{32})\b",data)[0]
+	if re.findall(r"^(\w+:\d+:)?\*:([a-fA-F\d]{32})(?![a-fA-F0-9])", data) and 'win' in filters: # SAM(*:NT)
+		result_details['SAM(*:nt)']='hashes in SAM file - LM:not defined\tNT:%s' % re.findall(r"\*:([a-fA-F\d]{32})\b",data)[0]
 		if(all(chr.isupper() or chr.isdigit() for chr in re.findall(r"\*:([a-fA-F\d]{32})\b",data)[0])):
-			results['confident']+=['SAM(*:ntlm)']
+			results['confident']+=['SAM(*:nt)']
 		else:
-			results['possible']+=['SAM(*:ntlm)']
+			results['possible']+=['SAM(*:nt)']
 	if re.findall(r"^(\w+:\d+:)?[a-fA-F\d]{32}:\*", data) and 'win' in filters: # SAM(LM:*)
-		result_details['SAM(lm:*)']='hashes in SAM file - LM:%s\tNTLM:not defined' % re.findall(r"([a-fA-F\d]{32}):\*",data)[0]		
+		result_details['SAM(lm:*)']='hashes in SAM file - LM:%s\tNT:not defined' % re.findall(r"([a-fA-F\d]{32}):\*",data)[0]		
 		if(all(chr.isupper() or chr.isdigit() for chr in re.findall(r"([a-fA-F\d]{32}):\*",data)[0])):
 			results['confident']+=['SAM(lm:*)']
 		elif(re.match(r"^[\w+:]{4,6}", data)):
 			results['confident']+=['SAM(lm:*)']
 		else:
 			results['possible']+=['SAM(lm:*)']
-	if re.findall(r"^(\w+:\d+:)?[a-fA-F\d]{32}:[a-fA-F\d]{32}\b", data) and 'win' in filters: # SAM(LM:NTLM)
-		result_details['SAM(lm:ntlm)']='hashes in SAM file - LM:%s\tNTLM:%s' % re.findall(r"^(?:\w+:\d+:)?([a-fA-F\d]{32}):([a-fA-F\d]{32})\b",data)[0]
+	if re.findall(r"^(\w+:\d+:)?[a-fA-F\d]{32}:[a-fA-F\d]{32}\b", data) and 'win' in filters: # SAM(LM:NT)
+		result_details['SAM(lm:nt)']='hashes in SAM file - LM:%s\tnt:%s' % re.findall(r"^(?:\w+:\d+:)?([a-fA-F\d]{32}):([a-fA-F\d]{32})\b",data)[0]
 		if(all(chr.isupper() or chr.isdigit() or chr == '$' for chr in data)):
-			results['confident']+=['SAM(lm:ntlm)']
+			results['confident']+=['SAM(lm:nt)']
 		elif(re.match(r"^[\w+:]{4}", data)):
-			results['confident']+=['SAM(lm:ntlm)']
+			results['confident']+=['SAM(lm:nt)']
 		else:
-			results['possible']+=['SAM(lm:ntlm)']
+			results['possible']+=['SAM(lm:nt)']
 	if re.findall(r"\b[a-fA-F\d]{80}\b", data) and 'other' in filters: # RipeMD320
 		results['possible'].append('RipeMD320')
 	if re.findall(r"\b[a-fA-F\d]{40}\b", data) and 'other' in filters: # SHA1
@@ -209,7 +209,7 @@ if __name__ == '__main__':
 	parser.add_argument('-l','-list', dest='list', help='lists supported algorithms', required=False, action='store_true')
 	args=parser.parse_args()
 	if(args.list): 
-		print "shadow and SAM files, phpBB3, Wordpress, Joomla, CRC, LM, NTLM, MD4, MD5, Apr, SHA1, SHA256, base64, MySQL323, MYSQL4+, DES, RipeMD320, Whirlpool, SHA1, SHA224, SHA256, SHA384, SHA512, Blowfish, Java Session IDs"
+		print "shadow and SAM files, phpBB3, Wordpress, Joomla, CRC, LM, nt, MD4, MD5, Apr, SHA1, SHA256, base64, MySQL323, MYSQL4+, DES, RipeMD320, Whirlpool, SHA1, SHA224, SHA256, SHA384, SHA512, Blowfish, Java Session IDs"
 	elif(args.string is not None):
 		results,result_details = get_type_of(args.string, args.filters)
 		show(results, result_details, args.string, args.analyze)
