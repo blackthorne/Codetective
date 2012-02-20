@@ -22,14 +22,30 @@ def show(results, result_details, code, analyze=False, textmode=True):
 def get_type_of(data, filters, analyze=False):
 	results={'confident':[],'likely':[],'possible':[]}
 	result_details={}
-	if re.findall(r"\b[a-fA-F\d]{32}\b", data): # md4 or md5
+	if re.findall(r"(?<![a-fA-F0-9])[a-fA-F\d]{32}(?![a-fA-F0-9])", data): # md4 or md5
+		result_details['md5']='MD5 hash: %s' % re.findall(r"(?<![a-fA-F0-9])([a-fA-F\d]{32})(?![a-fA-F0-9])", data)[0]
+		result_details['md4']='MD4 hash: %s' % re.findall(r"(?<![a-fA-F0-9])([a-fA-F\d]{32})(?![a-fA-F0-9])", data)[0]
 		if(any(x for x in filters if x in ['web','other'])):
 			results['confident'].append('md5')
 			results['possible'].append('md4')
 		else:
 			results['likely'].append('md5')
 			results['possible'].append('md4')
-	if re.findall(r"\b[a-fA-F\d]{32}(?![a-fA-F0-9])", data) and 'win' in filters: # lm or ntlm
+	if re.findall(r"(:?0x0100)?[a-fA-F\d]{48}\b", data) and 'db' in filters: # mssql 2005 hash
+		result_details['mssql2005']='Microsoft SQL Server 2005\n\t\theader: 0x0100\n\t\tsalt: %s\n\t\tmixed case hash (SHA1): %s' % re.findall(r"(?:0x0100)?([a-fA-F\d]{8})([a-fA-F\d]{40})", data)[0]
+		if(re.findall(r"\b0x0100[a-fA-F\d]{48}\b", data)):
+			results['confident'].append('mssql2005')
+		else:
+			results['likely'].append('mssql2005')
+	if(re.findall(r"(:?0x0100)?[a-fA-F\d]{88}", data) and 'db' in filters): #mssql 2000 hash
+		result_details['mssql2000']='Microsoft SQL Server 2000\n\t\theader: 0x0100\n\t\tsalt: %s\n\t\tmixed case hash (SHA1): %s\n\t\tupper case hash (SHA1): %s' % re.findall(r"(?:0x0100)?([a-fA-F\d]{8})([a-fA-F\d]{40})([a-fA-F\d]{40})", data)[0]
+		if re.findall(r"\b0x0100[a-fA-F\d]{88}\b", data):
+			results['confident'].append('mssql2000')
+		else:
+			results['likely'].append('mssql2000')
+	if re.findall(r"(?<![a-fA-F0-9])[a-fA-F\d]{32}(?![a-fA-F0-9])", data) and 'win' in filters: # lm or ntlm
+		result_details['lm']='LM hash: %s' % re.findall(r"(?<![a-fA-F0-9])([a-fA-F\d]{32})(?![a-fA-F0-9])", data)[0]
+		result_details['ntlm']='NTLM hash: %s' % re.findall(r"(?<![a-fA-F0-9])([a-fA-F\d]{32})(?![a-fA-F0-9])", data)[0]					
 		if(all(chr.isupper() or chr.isdigit() for chr in data)):
 			results['confident']+=['lm','ntlm']
 		else:
@@ -203,7 +219,7 @@ if __name__ == '__main__':
 	parser.add_argument('-l','-list', dest='list', help='lists supported algorithms', required=False, action='store_true')
 	args=parser.parse_args()
 	if(args.list): 
-		print "shadow and SAM files, phpBB3, Wordpress, Joomla, CRC, LM, NTLM, MD4, MD5, Apr, SHA1, SHA256, base64, MySQL323, MYSQL4+, DES, RipeMD320, Whirlpool, SHA1, SHA224, SHA256, SHA384, SHA512, Blowfish, Java Session IDs"
+		print "shadow and SAM files, phpBB3, Wordpress, Joomla, CRC, LM, NTLM, MD4, MD5, Apr, SHA1, SHA256, base64, MySQL323, MYSQL4+, MSSQL2000, MSSQL2005, DES, RipeMD320, Whirlpool, SHA1, SHA224, SHA256, SHA384, SHA512, Blowfish, Java Session IDs"
 	elif(args.string is not None):
 		results,result_details = get_type_of(args.string, args.filters)
 		show(results, result_details, args.string, args.analyze)
