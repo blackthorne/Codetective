@@ -31,13 +31,13 @@ def get_type_of(data, filters, analyze=False):
 		else:
 			results['likely'].append('md5')
 			results['possible'].append('md4')
-	if re.findall(r"(:?0x0100)?[a-fA-F\d]{48}\b", data) and 'db' in filters: # mssql 2005 hash
+	if re.findall(r"\b(:?0x0100)?[a-fA-F\d]{48}\b", data) and 'db' in filters: # mssql 2005 hash
 		result_details['mssql2005']='Microsoft SQL Server 2005\n\t\theader: 0x0100\n\t\tsalt: %s\n\t\tmixed case hash (SHA1): %s' % re.findall(r"(?:0x0100)?([a-fA-F\d]{8})([a-fA-F\d]{40})", data)[0]
 		if(re.findall(r"\b0x0100[a-fA-F\d]{48}\b", data)):
 			results['confident'].append('mssql2005')
 		else:
 			results['likely'].append('mssql2005')
-	if(re.findall(r"(:?0x0100)?[a-fA-F\d]{88}", data) and 'db' in filters): #mssql 2000 hash
+	if(re.findall(r"\b(:?0x0100)?[a-fA-F\d]{88}", data) and 'db' in filters): #mssql 2000 hash
 		result_details['mssql2000']='Microsoft SQL Server 2000\n\t\theader: 0x0100\n\t\tsalt: %s\n\t\tmixed case hash (SHA1): %s\n\t\tupper case hash (SHA1): %s' % re.findall(r"(?:0x0100)?([a-fA-F\d]{8})([a-fA-F\d]{40})([a-fA-F\d]{40})", data)[0]
 		if re.findall(r"\b0x0100[a-fA-F\d]{88}\b", data):
 			results['confident'].append('mssql2000')
@@ -164,7 +164,7 @@ def get_type_of(data, filters, analyze=False):
 	if re.findall(r"(?<![a-zA-Z0-9.])[a-zA-Z0-9./]{8}\$[a-zA-Z0-9./]{22}(?![a-zA-Z0-9./])", data) and 'unix' in filters: # MD5-salt(UNIX)
 		result_details['md5-salt-unix']='UNIX shadow file using salted MD5 - salt:%s\thash:%s' % re.findall(r"([a-zA-Z0-9./]{8})\$([a-zA-Z0-9./]{22})", data)[0]
 		results['confident'].append('md5-salt-unix')
-	if re.findall(r"(?<![a-zA-Z0-9.])[a-zA-Z0-9./]{31}(?![a-zA-Z0-9./])", data) and 'web' in filters:  # MD5(Wordpress)
+	if re.findall(r"(?<![a-zA-Z0-9.])[a-zA-Z0-9./]{31}(?![a-zA-Z0-9.=/])", data) and 'web' in filters:  # MD5(Wordpress)
 		result_details['md5-wordpress']='Wordpress MD5 - hash:%s' % re.findall("([a-zA-Z0-9./]{31})$", data)[0]
 		if re.match(r"\$P\$[a-zA-Z0-9./]{31}$", data):
 			results['confident'].append('md5-wordpress')
@@ -172,7 +172,7 @@ def get_type_of(data, filters, analyze=False):
 			results['likely'].append('md5-wordpress')
 		else:
 			results['possible'].append('md5-wordpress')
-	if re.findall(r"(?<![a-zA-Z0-9.])[a-zA-Z0-9./]{31}(?![a-zA-Z0-9./])", data) and 'web' in filters:  # MD5(phpBB3)
+	if re.findall(r"(?<![a-zA-Z0-9.])[a-zA-Z0-9./]{31}(?![a-zA-Z0-9.=/])", data) and 'web' in filters:  # MD5(phpBB3)
 		result_details['md5-phpBB3']='phpBB3 MD5 - hash: %s' % re.findall("[a-zA-Z0-9./]{31}$", data)[0]
 		if re.match(r"\$H\$[a-zA-Z0-9./]{31}$", data):
 			results['confident'].append('md5-phpBB3')
