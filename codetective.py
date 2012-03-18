@@ -6,6 +6,10 @@ __version__ = '0.6'
 __date__ = '2011/12/04'
 __license__ = 'WTFPL'
 
+#ASPSESSIONID=PUYQGHUMEAAJPUYL
+#ASPSESSIONIDGQQGGLIC=HKEDPNNBNBBKMOCFFBEIJENM;
+#jsessionid=55FE296F7E83C60A5DA2F98CB3716BEA
+
 import re,sys,argparse,base64
 
 def show(results, result_details, code, analyze=False, textmode=True):
@@ -18,7 +22,7 @@ def show(results, result_details, code, analyze=False, textmode=True):
 						print '\t',result_details[codetype]
 	if(len(results['confident']) + len(results['likely']) + len(results['possible']) == 0):
 		print 'unknown! ;('
-#(?<![a-zA-Z0-9./$])
+
 def get_type_of(data, filters, analyze=False):
 	results={'confident':[],'likely':[],'possible':[]}
 	result_details={}
@@ -191,7 +195,7 @@ def get_type_of(data, filters, analyze=False):
 		results['confident'].append('md5-salt-unix')
 
 	if re.findall(r"(?<![a-zA-Z0-9.])[a-zA-Z0-9./]{31}(?![a-zA-Z0-9.=/])", data) and 'web' in filters:  # MD5(Wordpress)
-		result_details['md5-wordpress']='Wordpress MD5 - hash:%s' % re.findall("([a-zA-Z0-9./]{31})$", data)[0]
+		result_details['md5-wordpress']='Wordpress MD5 - hash:%s' % re.findall("([a-zA-Z0-9./]{31})", data)[0]
 		if re.match(r"\$P\$[a-zA-Z0-9./]{31}$", data):
 			results['confident'].append('md5-wordpress')
 		elif filters == ['web'] and data.startswith('$'):
@@ -200,7 +204,7 @@ def get_type_of(data, filters, analyze=False):
 			results['possible'].append('md5-wordpress')
 
 	if re.findall(r"(?<![a-zA-Z0-9.])[a-zA-Z0-9./]{31}(?![a-zA-Z0-9.=/])", data) and 'web' in filters:  # MD5(phpBB3)
-		result_details['md5-phpBB3']='phpBB3 MD5 - hash: %s' % re.findall("[a-zA-Z0-9./]{31}$", data)[0]
+		result_details['md5-phpBB3']='phpBB3 MD5 - hash: %s' % re.findall("[a-zA-Z0-9./]{31}", data)[0]
 		if re.match(r"\$H\$[a-zA-Z0-9./]{31}$", data):
 			results['confident'].append('md5-phpBB3')
 		elif filters == ['web'] and data.startswith('$'):
