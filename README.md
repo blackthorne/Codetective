@@ -41,53 +41,54 @@ Examples
 	Found 29 tasks
 	kernel mapping...
 	Calculating task mappings...
-	 Process: wuauclt.exe	PPID: 1120	Pid: 1908
-	  Process: vmtoolsd.exe	PPID: 688	Pid: 348
-	   Process: vmacthlp.exe	PPID: 688	Pid: 912
-	    Process: svchost.exe	PPID: 688	Pid: 976
-	     Process: smss.exe	PPID: 4	Pid: 384
-	      Process: explorer.exe	PPID: 1680	Pid: 1696
-	       Process: cmd.exe	PPID: 1696	Pid: 1520
-	        Process: svchost.exe	PPID: 688	Pid: 160
-		 Process: vmtoolsd.exe	PPID: 1696	Pid: 1820
-		  Process: lsass.exe	PPID: 644	Pid: 700
-		   Process: services.exe	PPID: 644	Pid: 688
-		    Process: alg.exe	PPID: 688	Pid: 1936
-		     Process: svchost.exe	PPID: 688	Pid: 924
-		      Process: csrss.exe	PPID: 384	Pid: 620
-		       Process: svchost.exe	PPID: 688	Pid: 1208
-		        Process: TPAutoConnSvc.e	PPID: 688	Pid: 1220
-			 Process: spoolsv.exe	PPID: 688	Pid: 1572
-			  Process: svchost.exe	PPID: 688	Pid: 1172
-			   Process: svchost.exe	PPID: 688	Pid: 1120
-			    Process: winlogon.exe	PPID: 384	Pid: 644
-			     Process: rundll32.exe	PPID: 1696	Pid: 1788
-			      Process: TPAutoConnect.e	PPID: 1220	Pid: 1256
-			       Process: notepad.exe	PPID: 1696	Pid: 1896
-			       => at offset Virtual: 0x8012e000  	Physical: 0x12e000    	 Size: 0x1000        
-			       Found md5 (likely) 	MD5 hash: 0A5AE0AB474FF954BA5FB5CC22691599
-			       Found md4 (possible) 	MD4 hash: 0A5AE0AB474FF954BA5FB5CC22691599
+	Process: wuauclt.exe	PPID: 1120	Pid: 1908
+	Process: vmtoolsd.exe	PPID: 688	Pid: 348
+	Process: vmacthlp.exe	PPID: 688	Pid: 912
+    Process: svchost.exe	PPID: 688	Pid: 976
+	Process: smss.exe	PPID: 4	Pid: 384
+	Process: explorer.exe	PPID: 1680	Pid: 1696
+	Process: cmd.exe	PPID: 1696	Pid: 1520
+	Process: svchost.exe	PPID: 688	Pid: 160
+	Process: vmtoolsd.exe	PPID: 1696	Pid: 1820
+	Process: lsass.exe	PPID: 644	Pid: 700
+	Process: services.exe	PPID: 644	Pid: 688
+	Process: alg.exe	PPID: 688	Pid: 1936
+	Process: svchost.exe	PPID: 688	Pid: 924
+	Process: csrss.exe	PPID: 384	Pid: 620
+	Process: svchost.exe	PPID: 688	Pid: 1208
+	Process: TPAutoConnSvc.e	PPID: 688	Pid: 1220
+	Process: spoolsv.exe	PPID: 688	Pid: 1572
+	Process: svchost.exe	PPID: 688	Pid: 1172
+	Process: svchost.exe	PPID: 688	Pid: 1120
+	Process: winlogon.exe	PPID: 384	Pid: 644
+	Process: rundll32.exe	PPID: 1696	Pid: 1788
+	Process: TPAutoConnect.e	PPID: 1220	Pid: 1256
+	Process: notepad.exe	PPID: 1696	Pid: 1896
+	
+	=> at offset Virtual: 0x8012e000  	Physical: 0x12e000    	 Size: 0x1000        
+	 Found md5 (likely) 	MD5 hash: 0A5AE0AB474FF954BA5FB5CC22691599
+	 Found md4 (possible) 	MD4 hash: 0A5AE0AB474FF954BA5FB5CC22691599
 
-			       => at offset Virtual: 0x8013d000  	Physical: 0x13d000    	 Size: 0x1000        
-			       Found md5 (likely) 	MD5 hash: 4BE2C18D9154D0240B36AEF861085FEC
-			       Found md4 (possible) 	MD4 hash: 4BE2C18D9154D0240B36AEF861085FEC
+	=> at offset Virtual: 0x8013d000  	Physical: 0x13d000    	 Size: 0x1000        
+	 Found md5 (likely) 	MD5 hash: 4BE2C18D9154D0240B36AEF861085FEC
+	 Found md4 (possible) 	MD4 hash: 4BE2C18D9154D0240B36AEF861085FEC
 
-			       => at offset Virtual: 0x80153000  	Physical: 0x153000    	 Size: 0x1000        
-			       Found md5 (likely) 	MD5 hash: 0B79C053C7D38EE4AB9A00CB3B5D2472
-			       Found md4 (possible) 	MD4 hash: 0B79C053C7D38EE4AB9A00CB3B5D2472
+	=> at offset Virtual: 0x80153000  	Physical: 0x153000    	 Size: 0x1000        
+	 Found md5 (likely) 	MD5 hash: 0B79C053C7D38EE4AB9A00CB3B5D2472
+	 Found md4 (possible) 	MD4 hash: 0B79C053C7D38EE4AB9A00CB3B5D2472
 
-			       => at offset Virtual: 0x80171000  	Physical: 0x171000    	 Size: 0x1000        
-			       Found md5 (likely) 	MD5 hash: 10F84F9347B42F6428155C59A743D317
-			       Found md4 (possible) 	MD4 hash: 10F84F9347B42F6428155C59A743D317
+	=> at offset Virtual: 0x80171000  	Physical: 0x171000    	 Size: 0x1000        
+	 Found md5 (likely) 	MD5 hash: 10F84F9347B42F6428155C59A743D317
+	 Found md4 (possible) 	MD4 hash: 10F84F9347B42F6428155C59A743D317
 
-			       => at offset Virtual: 0x8018a000  	Physical: 0x18a000    	 Size: 0x1000        
-			       Found md5 (likely) 	MD5 hash: 5046ab8cb6b1ce11920c00aa006c4972
-			       Found md4 (possible) 	MD4 hash: 5046ab8cb6b1ce11920c00aa006c4972
+	=> at offset Virtual: 0x8018a000  	Physical: 0x18a000    	 Size: 0x1000        
+	 Found md5 (likely) 	MD5 hash: 5046ab8cb6b1ce11920c00aa006c4972
+	 Found md4 (possible) 	MD4 hash: 5046ab8cb6b1ce11920c00aa006c4972
 
-			       => at offset Virtual: 0x801a2000  	Physical: 0x1a2000    	 Size: 0x1000        
-			       Found md5 (likely) 	MD5 hash: C25F308FAE39B3A4D9E1561F679CD8AA
-			       Found md4 (possible) 	MD4 hash: C25F308FAE39B3A4D9E1561F679CD8AA
-			       ...	
+	=> at offset Virtual: 0x801a2000  	Physical: 0x1a2000    	 Size: 0x1000        
+	 Found md5 (likely) 	MD5 hash: C25F308FAE39B3A4D9E1561F679CD8AA
+	 Found md4 (possible) 	MD4 hash: C25F308FAE39B3A4D9E1561F679CD8AA
+	...	
 
 
 
@@ -129,52 +130,54 @@ Usage
 
 As a Volatility v2.0 plugin:
 
+	$ python vol.py codetective -h
 	Volatile Systems Volatility Framework 2.0
-
 	Usage: Volatility - A memory forensics analysis platform.
-
+	
 	Options:
 	  -h, --help            list all available options and their default values.
-	                          Default values may be set in the configuration file
-				                          (/etc/volatilityrc)
-							    --conf-file=/Users/blackthorne/.volatilityrc
-							                            User based configuration file
-										      -d, --debug           Debug volatility
-										        --info                Print information about all registered objects
-											  --plugins=PLUGINS     Additional plugin directories to use (colon separated)
-											    --cache-directory=/Users/blackthorne/.cache/volatility
-											                            Directory where cache files are stored
-														      --no-cache            Disable caching
-														        --tz=TZ               Sets the timezone for displaying timestamps
-															  -f FILENAME, --filename=FILENAME
-															                          Filename to use when opening an image
-																		    --output=text         Output in this format (format support is module
-																		                            specific)
-																					      --output-file=OUTPUT_FILE
-																					                              write output in this file
-																								        -v, --verbose         Verbose information
-																									  -k KPCR, --kpcr=KPCR  Specify a specific KPCR address
-																									    -g KDBG, --kdbg=KDBG  Specify a specific KDBG virtual address
-																									      --dtb=DTB             DTB Address
-																									        --cache-dtb           Cache virtual to physical mappings
-																										  --use-old-as          Use the legacy address spaces
-																										    -w, --write           Enable write support
-																										      --profile=WinXPSP2x86
-																										                              Name of the profile to load
-																													        -l LOCATION, --location=LOCATION
-																														                        A URN location from which to load an address space
-																																	  -n PNAME, --pname=PNAME
-																																	                          define target Process name
-																																				    -p PID, --pid=PID     define target Process ID
-																																				      -t FILTERS, --filters=FILTERS
-																																				                              apply filters, can be: win, web, unix, db and other
-																																							                              (default: none)
-																																										        -u, --uuids           include UUIDS in search (default: No)
+	                        Default values may be set in the configuration file
+	                        (/etc/volatilityrc)
+	  --conf-file=/your/home/.volatilityrc
+	                        User based configuration file
+	  -d, --debug           Debug volatility
+	  --info                Print information about all registered objects
+	  --plugins=PLUGINS     Additional plugin directories to use (colon separated)
+	  --cache-directory=/Users/blackthorne/.cache/volatility
+	                        Directory where cache files are stored
+	  --no-cache            Disable caching
+	  --tz=TZ               Sets the timezone for displaying timestamps
+	  -f FILENAME, --filename=FILENAME
+	                        Filename to use when opening an image
+	  --output=text         Output in this format (format support is module
+	                        specific)
+	  --output-file=OUTPUT_FILE
+	                        write output in this file
+	  -v, --verbose         Verbose information
+	  -k KPCR, --kpcr=KPCR  Specify a specific KPCR address
+	  -g KDBG, --kdbg=KDBG  Specify a specific KDBG virtual address
+	  --dtb=DTB             DTB Address
+	  --cache-dtb           Cache virtual to physical mappings
+	  --use-old-as          Use the legacy address spaces
+	  -w, --write           Enable write support
+	  --profile=WinXPSP2x86
+	                        Name of the profile to load
+	  -l LOCATION, --location=LOCATION
+	                        A URN location from which to load an address space
+	  -n PNAME, --pname=PNAME
+	                        define target Process name
+	  -p PID, --pid=PID     define target Process ID
+	  -t FILTERS, --filters=FILTERS
+	                        apply filters, can be: win, web, unix, db and other
+	                        (default: none)
+	  -u, --uuids           include UUIDS in search (default: No)
+	
+	---------------------------------
+	Module Codetective
+	---------------------------------
+	determine the crypto/encoding algorithm used according to traces from its representation
 
-																																											---------------------------------
-																																											Module Codetective
-																																											---------------------------------
-																																											determine the crypto/encoding algorithm used according to traces from its representation
+
 
 Generic version:
 
