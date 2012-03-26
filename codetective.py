@@ -2,7 +2,7 @@
 # encoding: utf-8
 __description__ = 'a tool to determine the crypto/encoding algorithm used according to traces of its representation'
 __author__ = 'Francisco da Gama Tabanez Ribeiro'
-__version__ = '0.6'
+__version__ = '0.7'
 __date__ = '2011/12/04'
 __license__ = 'WTFPL'
 
