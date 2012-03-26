@@ -216,8 +216,8 @@ This script is heavily based on regular expressions done with a mindset of rejec
 Notice that this tool also infers on the confidence level relative to each guess and it's able to give you a preliminary analyze (-a). 
 
 Notice that results improve with filters (-f) that can be specified so if you know that the source of the file is related to the web, Codetective will have more confidence when trying to determine the source of code when considering web applications frameworks such as Joomla or Django. 
-If you find this tool usefel, know that there is other called [Hash Identifier] (http://code.google.com/p/hash-identifier/)  that works in a different way that may also be helpful to you.
+If you find this tool useful, know that there is other called [Hash Identifier] (http://code.google.com/p/hash-identifier/)  that works in a different way that may also be helpful to you.
 
-When using Codetective as plugin for Volatility remember to use uuids search option (-u) if you need it, since it is disabled by default.
+When using Codetective as plugin for Volatility remember to use uuids search option (-u) if you need it, since it is disabled by default. Most relevant options are -u (show UUIDs), -v (verbose mode), -t (filters), -p (search for Process ID) and -n (search for process name). If neither -p or -n is defined, if will search in all processes.
 
 Finally, when passing strings from the command-line, always wrap your input string with '' (at least, if you're using bash) so that special characters such as '!' don't mess up with the input before it gets processed by Codetective.
