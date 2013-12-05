@@ -36,6 +36,19 @@ def get_type_of(data, filters, analyze=False):
 			results['likely'].append('md5')
 			results['possible'].append('md4')
 			
+	# from http://stackoverflow.com/questions/3868753/find-phone-numbers-in-python-script
+	if re.findall(r"[^\d]\d{3}[-\.\s]??\d{3}[-\.\s]??\d{4}|\(\d{3}\)\s*\d{3}[-\.\s]??\d{4}|\d{3}[-\.\s]??\d{4}[^\d]", data) and 'personal' in filters: # phone numbers
+		result_details['phone']='Phone number: %s' % re.findall(r"(\d{3}[-\.\s]??\d{3}[-\.\s]??\d{4}|\(\d{3}\)\s*\d{3}[-\.\s]??\d{4}|\d{3}[-\.\s]??\d{4})", data)[0]
+		if(any(x for x in filters if x in ['personal'])):
+			if re.match(r"\+\d{3}[-\.\s]??\d{3}[-\.\s]??\d{4}|\(\d{3}\)\s*\d{3}[-\.\s]??\d{4}|\d{3}[-\.\s]??\d{4}[^\d]", data):
+				results['confident'].append('phone')
+				result_details['phone']='Phone number: %s' % re.findall(r"(\+\d{3}[-\.\s]??\d{3}[-\.\s]??\d{4}|\(\d{3}\)\s*\d{3}[-\.\s]??\d{4}|\d{3}[-\.\s]??\d{4})", data)[0]
+			else:
+				results['likely'].append('phone')
+				result_details['phone']='Phone number: %s' % re.findall(r"(\d{3}[-\.\s]??\d{3}[-\.\s]??\d{4}|\(\d{3}\)\s*\d{3}[-\.\s]??\d{4}|\d{3}[-\.\s]??\d{4})", data)[0]	
+		else:
+			results['possible'].append('phone')
+		
 	if re.findall(r"\b(:?0x0100)?[a-fA-F\d]{48}\b", data) and 'db' in filters: # mssql 2005 hash
 		result_details['mssql2005']='Microsoft SQL Server 2005\n\t\theader: 0x0100\n\t\tsalt: %s\n\t\tmixed case hash (SHA1): %s' % re.findall(r"(?:0x0100)?([a-fA-F\d]{8})([a-fA-F\d]{40})", data)[0]
 		if(re.findall(r"\b0x0100[a-fA-F\d]{48}\b", data)):
@@ -259,14 +272,14 @@ if __name__ == '__main__':
 	                                 epilog='use filters for more accurate results')	           
 	parser.add_argument('string',type=str,nargs='?',
 	                    help='determine algorithm used for <string> according to its data representation')
-	parser.add_argument('-t', metavar='filters', default=['win','web','unix','db','other'], type=str, nargs=1,
+	parser.add_argument('-t', metavar='filters', default=['win','web','unix','db','personal','other'], type=str, nargs=1,
                    dest='filters', help='filter by source of your string. can be: win, web, db, unix or other')
 	parser.add_argument('-a', '-analyze', dest='analyze', help='show more details whenever possible (expands shadow files fields,...)', required=False, action='store_true')
 	parser.add_argument('-f','-file', dest='filename', nargs=1, help='load a file')
 	parser.add_argument('-l','-list', dest='list', help='lists supported algorithms', required=False, action='store_true')
 	args=parser.parse_args()
 	if(args.list): 
-		print "shadow and SAM files, phpBB3, Wordpress, Joomla, CRC, LM, NTLM, MD4, MD5, Apr, SHA1, SHA256, base64, MySQL323, MYSQL4+, MSSQL2000, MSSQL2005, DES, RipeMD320, Whirlpool, SHA1, SHA224, SHA256, SHA384, SHA512, Blowfish, UUID"
+		print "shadow and SAM files, phpBB3, Wordpress, Joomla, CRC, LM, NTLM, MD4, MD5, Apr, SHA1, SHA256, base64, MySQL323, MYSQL4+, MSSQL2000, MSSQL2005, DES, RipeMD320, Whirlpool, SHA1, SHA224, SHA256, SHA384, SHA512, Blowfish, UUID, phone numbers"
 	elif(args.string is not None):
 		results,result_details = get_type_of(args.string, args.filters)
 		show(results, result_details, args.string, args.analyze)
