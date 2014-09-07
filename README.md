@@ -1,12 +1,79 @@
 Codetective
 =============
+Sometimes we run into hashes and other artefacts and can't figure out where did they come from and how they were generated. This tool is able to recognise the output format of many different algorithms in many different possible encodings for analysis purposes. It also infers the levels of certainty for each finding based on traces of its representation .
 
-Sometimes we ran into hashes and other codes and can't figure out where did they came from and how they were built. If you work on pen-testing that might easily happen when you are testing systems from a black box perspective and you are able to grab a password file with hashed contents maybe from an exposed backup file or by dumping memory..
-This may also be useful as a part of a fingerprinting process.
+This may be useful e.g. when you are testing systems from a security perspective and are able to grab a password file with hashed contents maybe from an exposed backup file or by dumping memory. This may also be useful as a part of a fingerprinting process or simply to verify valid implementations of different algorithms. You may also try running this tool against network traffic captures or large source code repositories to look out for interesting stuff.
 
 You can either use a generic version or as a plugin for the Volatility framework. The usage is similar.
 
-Examples
+Changelog
+--------
+
+Version 0.8
+--------
+Finally a new version of Codetective is ready. This is close to a complete re-write with new features and many, many bug fixes. The code is still not something to look at but it’s now a lot more object oriented and easier to maintain. Now, codetective can also report the exact location of a finding and the ‘certainty’ feature is now numeric in order to include multiple factors with different weights and become more precise. The new entropy checks added to better detect cryptographic findings also take advantage of this and you can limit results being displayed only to findings with a specified minimum level of certainty (-m number).
+A different approach regarding the way data is loaded into memory has been adopted so now Codetective will break data into slices and analyse them by turn. This is to prevent it from filling the memory when reading large files. To prevent losing results there is now an overlapping window which will make sure no findings are caught in the breaks (*). A verbose mode was also added, it’s now possible to see the progress status which can be useful for the longer runs.
+
+Directory mode (-d rootPath) allows you to tell Codetective to look at folders rather than files and you can use it in recursive mode (-r) as well. if applied to large amounts of data, it might be useful to filter outputs by minimum certainty level e.g. -m 70. It also supports reading data from standard input.
+
+A new filter was added called ‘personal’ and can be used for findings that may include personal data such as phone numbers and credit cards which are now supported as well. Other algorithms supported in the new version include web cookies, URLs and with the ‘generator’ option, Codetective will try to load all encoding/decoding supported by your Python environment (the ‘aliases’ module) and apply them in order to find something meaningful. This can be used to try multiple encoding (-g encode) or decodings (-g decode) or both (-g both). Preprocessors (-p) now allow binary structures to be first converted onto strings using the C struct packing string patterns. 
+Finally, the ‘validators’ function now provides a powerful way to filter outputs. You may use up to 3 validators per run using the -v1 -v2 -v3 parameters respectively. Each validator it is a combination of a predicate ‘ALL’ or ‘HAS’ with a matching function such as UPPER for findings in upper case. Functions currently supported are :
+
+* NUMERIC
+* ALPHA
+* LOWER
+* UPPER
+* ALPHANUMERIC
+* SYMBOL
+
+For a custom validator you can also provide your own regular expression using the predicate SEARCH followed by the desired regular expression.
+
+(*) - you may have duplicate results because of this but will be addressed in future.
+
+Supported filters are: win, web, unix, db, personal, crypto and other.
+* web-cookie
+* mssql2000
+* md5
+* URL
+* md4
+* phone number
+* credit cards
+* mssql2005
+* lm hash
+* ntlm hash
+* MySQL4+
+* MySQL323
+* base64
+* SAM(*:ntlm)
+* SAM(lm:*)
+* SAM(lm:ntlm)
+* RipeMD320
+* sha1
+* sha224
+* sha256
+* sha384
+* sha512
+* whirpool
+* CRC
+* des-salt-unix
+* sha256-salt-django
+* sha256-django
+* sha384-salt-django
+* sha384-django
+* sha256-salt-unix
+* sha512-salt-unix
+* apr1-salt-unix
+* md5-salt-unix
+* md5-wordpress
+* md5-phpBB3
+* md5-joomla2
+* md5-salt-joomla2
+* md5-joomla1
+* md5-salt-joomla1
+* blowfish-salt-unix
+* uuid
+
+Examples (old)
 --------
 
 	$ python codetective.py '79b61b093c3c063fd45f03d55493902f'
@@ -128,6 +195,64 @@ Examples
 Usage
 -----
 
+Generic version:
+
+        usage: codetective.py [-h] [-t filters] [-a] [-v] [-m MIN_CERTAINTY]
+                              [-p PREPROCESSOR] [-g GENERATOR] [-v1 VALIDATOR1]
+                              [-v2 VALIDATOR2] [-v3 VALIDATOR3] [-r] [-f FILENAME]
+                              [-d DIRECTORY] [-fp FILE_PATTERN] [-l]
+                              [string]
+
+        a tool to determine the crypto/encoding algorithm used according to traces of
+        its representation
+
+        positional arguments:
+          string                determine algorithm used for <string> according to its
+                                data representation
+
+        optional arguments:
+          -h, --help            show this help message and exit
+          -t filters            filter by source of your string. can be: win, web, db,
+                                unix or other
+          -a, -analyze          show more details whenever possible (expands shadow
+                                files fields,...)
+          -v, -verbose          verbose mode shows progress status (useful for large
+                                files) and time taken
+          -m MIN_CERTAINTY, -minimum-certainty MIN_CERTAINTY
+                                specify the minimum acceptable certainty level for
+                                displayed results (0 - 100)
+          -p PREPROCESSOR, --preprocessor PREPROCESSOR
+                                <struct format string> interpret bytes as packed
+                                binary data. Unpacks contents from different data and
+                                endianess types according to format strings patterns
+                                as specified on:
+                                https://docs.python.org/2/library/struct.html
+          -g GENERATOR, -generator GENERATOR
+                                find encoding/decoding algorithm that exposes
+                                interesting artifacts (choose: 'encode', 'decode',
+                                'both')
+          -v1 VALIDATOR1, -validator1 VALIDATOR1
+                                applies validator 1
+          -v2 VALIDATOR2, -validator2 VALIDATOR2
+                                applies validator 2
+          -v3 VALIDATOR3, -validator3 VALIDATOR3
+                                applies validator 3
+          -r, -recursive        sets recursive mode upon specified directory (current
+                                workdir by default). Consider using it with
+                                min_certainty option
+          -f FILENAME, -file FILENAME
+                                load a specified file
+          -d DIRECTORY, -directory DIRECTORY
+                                load a specified directory
+          -fp FILE_PATTERN, -file-pattern FILE_PATTERN
+                                specified which file pattern to be used with directory
+                                (default: '*')
+          -l, -list             lists supported algorithms
+
+        use filters for more accurate results. Report bugs, ideas, feedback to:
+        blackthorne@ironik.org
+
+
 As a Volatility v2.0 plugin:
 
 	$ python vol.py codetective -h
@@ -178,29 +303,6 @@ As a Volatility v2.0 plugin:
 	determine the crypto/encoding algorithm used according to traces from its representation
 
 
-
-Generic version:
-
-	usage: codetective.py [-h] [-t filters] [-a] [-f FILENAME] [-l] [string]
-
-	a simple tool to determine the crypto/encoding algorithm used according to
-	traces of its representation
-
-	positional arguments:
-	  string                determine algorithm used for <string> according to its
-                        data representation
-
-	optional arguments:
-	  -h, --help            show this help message and exit
-	  -t filters            filter by source of your string. can be: win, web, db,
-    	                    unix or other
-	  -a, -analyze          show more details whenever possible (expands shadow
-   	                     files fields,...)
-	  -f FILENAME, -file FILENAME
-        	                load a file
-	  -l, -list             lists supported algorithms
-
-	use filters for more accurate results
 
 
 Requirements
