@@ -9,7 +9,7 @@ You can either use a generic version or as a plugin for the Volatility framework
 Changelog
 --------
 
-Version 0.8
+Version 0.8.1
 --------
 Finally a new version of Codetective is ready. This is close to a complete re-write with new features and many, many bug fixes. The code is still not something to look at but it’s now a lot more object oriented and easier to maintain. Now, codetective can also report the exact location of a finding and the ‘certainty’ feature is now numeric in order to include multiple factors with different weights and become more precise. The new entropy checks added to better detect cryptographic findings also take advantage of this and you can limit results being displayed only to findings with a specified minimum level of certainty (-m number).
 A different approach regarding the way data is loaded into memory has been adopted so now Codetective will break data into slices and analyse them by turn. This is to prevent it from filling the memory when reading large files. To prevent losing results there is now an overlapping window which will make sure no findings are caught in the breaks (*). A verbose mode was also added, it’s now possible to see the progress status which can be useful for the longer runs.
