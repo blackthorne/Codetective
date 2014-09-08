@@ -740,8 +740,8 @@ def process_file(filename, args):
 
 	fl.close()
 	
-def version():
-	print 'Codetective ' + __version__ + ' ' + __date__
+def show_version():
+	print 'Codetective v' + __version__ + ' ' + __date__
 	print __author__
 
 
@@ -819,7 +819,7 @@ if __name__ == '__main__':
 				show2(results, args.analyze, validators, min_certainty) 		
 		
 	elif args.version:
-		version()
+		show_version()
 
 	else:
 		parser.print_help()
