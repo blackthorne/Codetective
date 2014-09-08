@@ -196,63 +196,63 @@ Usage
 -----
 
 Generic version:
+    usage: codetective.py [-h] [-t filters] [-a] [-v] [-m MIN_CERTAINTY]
+			  [-p PREPROCESSOR] [-g GENERATOR] [-v1 VALIDATOR1]
+			  [-v2 VALIDATOR2] [-v3 VALIDATOR3] [-r] [-f FILENAME]
+			  [-d DIRECTORY] [-fp FILE_PATTERN] [-l] [-s] [-ver]
+			  [string]
 
-        usage: codetective.py [-h] [-t filters] [-a] [-v] [-m MIN_CERTAINTY]
-                              [-p PREPROCESSOR] [-g GENERATOR] [-v1 VALIDATOR1]
-                              [-v2 VALIDATOR2] [-v3 VALIDATOR3] [-r] [-f FILENAME]
-                              [-d DIRECTORY] [-fp FILE_PATTERN] [-l]
-                              [string]
+    a tool to determine the crypto/encoding algorithm used according to traces of
+    its representation
 
-        a tool to determine the crypto/encoding algorithm used according to traces of
-        its representation
+    positional arguments:
+      string                determine algorithm used for <string> according to its
+			    data representation
 
-        positional arguments:
-          string                determine algorithm used for <string> according to its
-                                data representation
+    optional arguments:
+      -h, --help            show this help message and exit
+      -t filters            filter by source of your string. can be: win, web, db,
+			    unix or other
+      -a, -analyze          show more details whenever possible (expands shadow
+			    files fields,...)
+      -v, -verbose          verbose mode shows progress status (useful for large
+			    files) and time taken
+      -m MIN_CERTAINTY, -minimum-certainty MIN_CERTAINTY
+			    specify the minimum acceptable certainty level for
+			    displayed results (0 - 100)
+      -p PREPROCESSOR, --preprocessor PREPROCESSOR
+			    <struct format string> interpret bytes as packed
+			    binary data. Unpacks contents from different data and
+			    endianess types according to format strings patterns
+			    as specified on:
+			    https://docs.python.org/2/library/struct.html
+      -g GENERATOR, -generator GENERATOR
+			    find encoding/decoding algorithm that exposes
+			    interesting artifacts (choose: 'encode', 'decode',
+			    'both')
+      -v1 VALIDATOR1, -validator1 VALIDATOR1
+			    applies validator 1
+      -v2 VALIDATOR2, -validator2 VALIDATOR2
+			    applies validator 2
+      -v3 VALIDATOR3, -validator3 VALIDATOR3
+			    applies validator 3
+      -r, -recursive        sets recursive mode upon specified directory (current
+			    workdir by default). Consider using it with
+			    min_certainty option
+      -f FILENAME, -file FILENAME
+			    load a specified file
+      -d DIRECTORY, -directory DIRECTORY
+			    load a specified directory
+      -fp FILE_PATTERN, -file-pattern FILE_PATTERN
+			    specified which file pattern to be used with directory
+			    (default: '*')
+      -l, -list             lists supported algorithms
+      -s, -stdin            read data from standard input
+      -ver, -version        displays software version
 
-        optional arguments:
-          -h, --help            show this help message and exit
-          -t filters            filter by source of your string. can be: win, web, db,
-                                unix or other
-          -a, -analyze          show more details whenever possible (expands shadow
-                                files fields,...)
-          -v, -verbose          verbose mode shows progress status (useful for large
-                                files) and time taken
-          -m MIN_CERTAINTY, -minimum-certainty MIN_CERTAINTY
-                                specify the minimum acceptable certainty level for
-                                displayed results (0 - 100)
-          -p PREPROCESSOR, --preprocessor PREPROCESSOR
-                                <struct format string> interpret bytes as packed
-                                binary data. Unpacks contents from different data and
-                                endianess types according to format strings patterns
-                                as specified on:
-                                https://docs.python.org/2/library/struct.html
-          -g GENERATOR, -generator GENERATOR
-                                find encoding/decoding algorithm that exposes
-                                interesting artifacts (choose: 'encode', 'decode',
-                                'both')
-          -v1 VALIDATOR1, -validator1 VALIDATOR1
-                                applies validator 1
-          -v2 VALIDATOR2, -validator2 VALIDATOR2
-                                applies validator 2
-          -v3 VALIDATOR3, -validator3 VALIDATOR3
-                                applies validator 3
-          -r, -recursive        sets recursive mode upon specified directory (current
-                                workdir by default). Consider using it with
-                                min_certainty option
-          -f FILENAME, -file FILENAME
-                                load a specified file
-          -d DIRECTORY, -directory DIRECTORY
-                                load a specified directory
-          -fp FILE_PATTERN, -file-pattern FILE_PATTERN
-                                specified which file pattern to be used with directory
-                                (default: '*')
-          -l, -list             lists supported algorithms
-
-        use filters for more accurate results. Report bugs, ideas, feedback to:
-        blackthorne@ironik.org
-
-
+    use filters for more accurate results. Report bugs, ideas, feedback to:
+    blackthorne@ironik.org
+        
 As a Volatility v2.0 plugin:
 
 	$ python vol.py codetective -h
