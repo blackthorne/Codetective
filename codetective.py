@@ -2,7 +2,7 @@
 # encoding: utf-8
 __description__ = 'a tool to determine the crypto/encoding algorithm used according to traces of its representation'
 __author__ = 'Francisco da Gama Tabanez Ribeiro'
-__version__ = '0.8'
+__version__ = '0.8.1'
 __date__ = '2014/09/07'
 __license__ = 'GPL'
 
@@ -357,6 +357,7 @@ def get_type_of(subText, filters, baseLocation=0, analyze=False):
 	if ('crypto' in filters or 'other' in filters): # SHA512 or Whirlpool
 		for finding in regFind('sha512', subText):
 			data, location = finding.group(), (baseLocation,finding.span())			
+			potential_hash=re.findall(r"\b([a-fA-F\d]{128})\b",data)[0]
 			sha512_find=Finding('sha512', potential_hash, location, 15, 'SHA512: %s' % potential_hash)
 			whirlpool_find=Finding('whirlpool', potential_hash, location, 5, 'Whirlpool: %s' % potential_hash)	
 			
@@ -444,7 +445,7 @@ def get_type_of(subText, filters, baseLocation=0, analyze=False):
 	if ('crypto' in filters or 'unix' in filters): # SHA256-salt(UNIX)
 		for finding in regFind('sha256-salt-unix', subText):
 			data, location = finding.group(), (baseLocation,finding.span())
-			sha256_find = re.findall(r"\$5\$([a-zA-Z0-9./]{8,16})\$([a-zA-Z0-9./]{43})", data)
+			sha256_find = re.findall(r"\$5\$([a-zA-Z0-9./]{8,16})\$([a-zA-Z0-9./]{43})", data)[0]
 			sha256_salt_unix=Finding('sha256-salt-unix', sha256_find, location, 55, 'UNIX shadow file using salted SHA256 - salt: %s\thash: %s' % sha256_find)
 			if (entropy(re.findall(r"\$5\$[a-zA-Z0-9./]{8,16}\$([a-zA-Z0-9./]{43})",data[0]))>MIN_ENTROPY):
 				sha256_salt_unix.certainty+=25
@@ -453,7 +454,7 @@ def get_type_of(subText, filters, baseLocation=0, analyze=False):
 	if ('crypto' in filters or 'unix' in filters): # SHA512-salt(UNIX)
 		for finding in regFind('sha512-salt-unix', subText):
 			data, location = finding.group(), (baseLocation,finding.span())
-			sha512_find = re.findall(r"\$6\$([a-zA-Z0-9./]{8,16})\$([a-zA-Z0-9./]{86})", data)
+			sha512_find = re.findall(r"\$6\$([a-zA-Z0-9./]{8,16})\$([a-zA-Z0-9./]{86})", data)[0]
 			sha512_salt_unix=Finding('sha512-salt-unix', sha512_find, location, 55, 'UNIX shadow file using salted SHA512 - salt: %s\thash: %s' % sha512_find)
 			if (entropy(re.findall(r"\$6\$[a-zA-Z0-9./]{8,16}\$([a-zA-Z0-9./]{86})(?![a-zA-Z0-9./])",data[0]))>MIN_ENTROPY):
 				sha512_salt_unix.certainty+=25
@@ -684,6 +685,7 @@ def enumerate_files(rootPath, pattern, recursive=True):
 	fileList = []
 	
 	if recursive:
+		print "enumerating files..."
 		for root, dirs, files in os.walk(rootPath):
 			for filename in fnmatch.filter(files, pattern):
 				fileList.append(os.path.join(root, filename))
@@ -738,6 +740,9 @@ def process_file(filename, args):
 
 	fl.close()
 	
+def version():
+	print 'Codetective ' + __version__ + ' ' + __date__
+	print __author__
 
 
 if __name__ == '__main__':
@@ -760,6 +765,8 @@ if __name__ == '__main__':
 	parser.add_argument('-d','-directory', dest='directory', nargs=1, help='load a specified directory')
 	parser.add_argument('-fp','-file-pattern', dest='file_pattern', nargs=1, help='specified which file pattern to be used with directory (default: \'*\')')			
 	parser.add_argument('-l','-list', dest='list', help='lists supported algorithms', required=False, action='store_true')
+        parser.add_argument('-s', '-stdin', dest='stdin', help='read data from standard input', action='store_true')
+	parser.add_argument('-ver', '-version', dest='version', help='displays software version', action='store_true')
 	args=parser.parse_args()
 	
 	# set defaults	
@@ -799,7 +806,7 @@ if __name__ == '__main__':
 			process_file(file, args)
 
 	# stdin mode
-	elif sys.stdin is not None:
+	elif args.stdin:
 		
 		for data in sys.stdin:
 			if args.preprocessor is not None and len(args.preprocessor) == 1 :
@@ -811,9 +818,13 @@ if __name__ == '__main__':
 				results = get_type_of(data, args.filters)
 				show2(results, args.analyze, validators, min_certainty) 		
 		
+	elif args.version:
+		version()
+
 	else:
 		parser.print_help()
 		
+
 #@TODO: add OS fingerprinting from shadow/SAM file parsing
 #@TODO: proper logging rather than print's
 #@TODO: handle content as binary, octal, hexadecimal or another numeric base of your choice, int() base must be >= 2 and <= 36
