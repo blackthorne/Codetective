@@ -9,6 +9,11 @@ You can either use a generic version or as a plugin for the Volatility framework
 Changelog
 --------
 
+Version 0.8.2
+--------
+* Added detection for JWT tokens
+* Added generic secrets detection
+
 Version 0.8.1
 --------
 Finally a new version of Codetective is ready. This is close to a complete re-write with new features and many, many bug fixes. The code is still not something to look at but it’s now a lot more object oriented and easier to maintain. Now, codetective can also report the exact location of a finding and the ‘certainty’ feature is now numeric in order to include multiple factors with different weights and become more precise. The new entropy checks added to better detect cryptographic findings also take advantage of this and you can limit results being displayed only to findings with a specified minimum level of certainty (-m number).
