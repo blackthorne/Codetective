@@ -77,6 +77,8 @@ Supported filters are: win, web, unix, db, personal, crypto and other.
 * md5-salt-joomla1
 * blowfish-salt-unix
 * uuid
+* JWT
+* secrets in code
 
 Examples (old)
 --------
