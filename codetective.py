@@ -2,8 +2,7 @@
 # encoding: utf-8
 __description__ = 'a tool to determine the crypto/encoding algorithm used according to traces of its representation'
 __author__ = 'Francisco da Gama Tabanez Ribeiro'
-__version__ = '0.8.1'
-__date__ = '2014/09/07'
+__version__ = '0.8.2'
 __license__ = 'GPL'
 
 MIN_ENTROPY=3.3
@@ -107,13 +106,49 @@ regFinder['md5-joomla1']=re.compile(r"(?<![a-zA-Z0-9.])([a-zA-Z0-9./]{32})(?::[a
 regFinder['md5-salt-joomla1']=regFinder['md5-joomla1']
 regFinder['blowfish-salt-unix']=re.compile(r"[a-zA-Z0-9./]{2}\$[a-zA-Z0-9./]{53}(?![a-zA-Z0-9./])")
 regFinder['uuid']=re.compile(r"(?<![a-fA-F0-9])[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}(?![a-fA-F0-9])")
+regFinder['jwt']=re.compile(r"[a-zA-Z0-9\-_]+?\.[a-zA-Z0-9\-_]+?\.([a-zA-Z0-9\-_]+)?")
+regFinder['secret']=re.compile(r"([^=|:]+)")
 
 def regFind(regType, data):
 	return regFinder[regType].finditer(data)
 
 def get_type_of(subText, filters, baseLocation=0, analyze=False):
 	results2=[]
-					
+
+	if ('web' in filters or 'crypto' in filters):
+	
+		for finding in regFind('jwt', subText):
+			data, location = finding.group(), (baseLocation,finding.span())	
+                        printset = set(string.printable)
+                        potential_jwt_find = finding.group()
+                        potential_jwt_find_parts = potential_jwt_find.split('.')
+                        try:
+                                if len(potential_jwt_find_parts) == 3 and \
+                                   all(regFind('base64', potential_jwt_find_part) for potential_jwt_find_part in (potential_jwt_find_parts)) and \
+                                   set(base64.b64decode(''.join(potential_jwt_find_parts[:1]))).issubset(printset) and \
+                                   potential_jwt_find_parts[0].startswith('eyJ'):
+                                        jwt_find = Finding('jwt', potential_jwt_find, location, 85, 'JWT Token\t\theader: %s\t payload: %s\t signature: %s' % (potential_jwt_find_parts[0],base64.b64decode(potential_jwt_find_parts[1]),potential_jwt_find_parts[2]))
+                                        results2.append(jwt_find)
+                        except TypeError:
+                                pass
+                        
+        if ('crypto' in filters): #@TODO needs huge improvement
+                for line in subText.replace("\\n", "\n").splitlines():
+                        for finding in regFind('secret', line):
+                                data,location = finding.group(), (baseLocation,finding.span())
+                                for keyword in ['pass', 'key', 'security']:
+                                        if keyword != '' and keyword in line.lower():
+                                                secret_find = Finding('secret', finding.group(), location, 45, 'Secret: %s\t' % finding.group())
+                                                stripped_secret = finding.group().strip('\"').strip("'").strip()
+                                                for common_start_pitfall in ['/', '-', 'keystore_', '{{', '$', 'secret', 'ConfigMap', '[', 'true', 'false']:
+                                                        if stripped_secret.lower().startswith(common_start_pitfall.lower()):
+                                                                secret_find.certainty-=25
+                                               
+                                                if entropy(finding.group()) > MIN_ENTROPY:
+                                                        secret_find.certainty+=40
+                                                      
+                                                results2.append(secret_find)
+
 	#@TODO: poorly tested... test against burp files, add 'set-cookie'...
 	if ('web' in filters or 'crypto' in filters):
 		known_cookies=['_Utm','APSESSION', 'sessionID','Web_session']
