@@ -80,6 +80,12 @@ Supported filters are: win, web, unix, db, personal, crypto and other.
 * JWT
 * secrets in code
 
+Examples
+--------
+
+	$ python codetective.py -r -d mypath/ -m 80
+
+
 Examples (old)
 --------
 
