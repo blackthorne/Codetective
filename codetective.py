@@ -132,7 +132,7 @@ def get_type_of(subText, filters, baseLocation=0, analyze=False):
                         except TypeError:
                                 pass
                         
-        if ('crypto' in filters): #@TODO needs huge improvement
+        if ('crypto' in filters or 'secrets' in filters): #@TODO needs huge improvement
                 for line in subText.replace("\\n", "\n").splitlines():
                         for finding in regFind('secret', line):
                                 data,location = finding.group(), (baseLocation,finding.span())
