@@ -115,7 +115,7 @@ def regFind(regType, data):
 def get_type_of(subText, filters, baseLocation=0, analyze=False):
 	results2=[]
 
-	if ('web' in filters or 'crypto' in filters):
+	if ('web' in filters or 'crypto' in filters or 'secrets' in filters):
 	
 		for finding in regFind('jwt', subText):
 			data, location = finding.group(), (baseLocation,finding.span())	
@@ -236,7 +236,7 @@ def get_type_of(subText, filters, baseLocation=0, analyze=False):
 			results2.append(credit_find)
 		
 		
-	if ('db' in filters or 'crypto' in filters):
+	if ('db' in filters or 'crypto' in filters or 'secrets' in filters):
 		for finding in regFind('mssql2005', subText): # mssql 2005 hash
 			data, location = finding.group(), (baseLocation,finding.span())	
 			potential_hash = re.findall(r"(?:0x0100)?([a-fA-F\d]{8})([a-fA-F\d]{40})", data)[0]
@@ -247,7 +247,7 @@ def get_type_of(subText, filters, baseLocation=0, analyze=False):
 				mssql2005_find.certainty+=20
 			results2.append(mssql2005_find)
 	
-	if ('db' in filters or 'crypto' in filters):
+	if ('db' in filters or 'crypto' in filters or 'secrets' in filters):
 		for finding in regFind('mssql2000', subText):		#mssql 2000 hash
 			data, location = finding.group(), (baseLocation,finding.span())
 			potential_hash = re.findall(r"(?:0x0100)?([a-fA-F\d]{8})([a-fA-F\d]{40})([a-fA-F\d]{40})", data)[0]
@@ -259,7 +259,7 @@ def get_type_of(subText, filters, baseLocation=0, analyze=False):
 				mssql2000_find.certainty+=20			
 			results2.append(mssql2000_find)				
 
-	if ('win' in filters or 'crypto' in filters):
+	if ('win' in filters or 'crypto' in filters or 'secrets' in filters):
 			
 		for finding in regFind('lm', subText): # lm or ntlm
 			data, location = finding.group(), (baseLocation,finding.span())
@@ -275,7 +275,7 @@ def get_type_of(subText, filters, baseLocation=0, analyze=False):
 					ntlm_find.certainty+=10
 			results2+=[lm_find,ntlm_find]	
 
-	if ('db' in filters or 'crypto' in filters): # MySQL4+
+	if ('db' in filters or 'crypto' in filters or 'secrets' in filters): # MySQL4+
 		for finding in regFind('MySQL4+', subText):
 			data, location = finding.group(), (baseLocation,finding.span())
 			potential_hash=re.findall(r"\b(?:\*)?([a-fA-F\d]{40})\b", data)[0]
@@ -285,7 +285,7 @@ def get_type_of(subText, filters, baseLocation=0, analyze=False):
 			results2.append(mysql4_find)
 				
 		
-	if ('db' in filters or 'crypto' in filters): # MySQL323
+	if ('db' in filters or 'crypto' in filters or 'secrets' in filters): # MySQL323
 		for finding in regFind('MySQL323', subText):
 			data, location = finding.group(), (baseLocation,finding.span())			
 			potential_hash=re.findall(r"\b([a-fA-F\d]{16})\b", data)[0]
@@ -312,7 +312,7 @@ def get_type_of(subText, filters, baseLocation=0, analyze=False):
 					sam_ntlm_find.certainty+=15
 			results2.append(sam_ntlm_find)
 			
-	if ('win' in filters or 'crypto' in filters): # SAM(LM:*)
+	if ('win' in filters or 'crypto' in filters or 'secrets' in filters): # SAM(LM:*)
 		for finding in regFind('SAM(lm:*)', subText):
 			data, location = finding.group(), (baseLocation,finding.span())
 			potential_hash=re.findall(r"([a-fA-F\d]{32}):\*",data)[0]
@@ -324,7 +324,7 @@ def get_type_of(subText, filters, baseLocation=0, analyze=False):
 				sam_lm_find.certainty+=45
 			results2.append(sam_lm_find)
 				
-	if ('win' in filters or 'crypto' in filters): # SAM(LM:NTLM)
+	if ('win' in filters or 'crypto' in filters or 'secrets' in filters): # SAM(LM:NTLM)
 		for finding in regFind('SAM(lm:ntlm)', subText):
 			data, location = finding.group(), (baseLocation,finding.span())
 			lm,ntlm=re.findall(r"^(?:\w+:\d+:)?([a-fA-F\d]{32}):([a-fA-F\d]{32})\b",data)[0]
