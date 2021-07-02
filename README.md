@@ -8,6 +8,9 @@ You can either use a generic version or as a plugin for the Volatility framework
 
 Changelog
 --------
+Version 0.9 by FyinG
+--------
+* Re-construct by Python3, fixed bugs
 
 Version 0.8.2
 --------
