@@ -11,7 +11,7 @@ Changelog
 
 Version 0.9.0
 --------
-* Python 3 migration: updaedimports, print functions, string/bytes handling
+* Python 3 migration: updated imports, print functions, string/bytes handling
 * Refactoring: split monolithic detection into focused functions; added `PatternMatcher`
 * Error handling: comprehensive try/except around file IO, decoding, and processing
 * Type hints & docs: pervasive typing and improved docstrings for maintainability
