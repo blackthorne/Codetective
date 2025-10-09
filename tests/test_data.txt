@@ -1,0 +1,54 @@
+# Test data file for Codetective
+# This file contains various types of data that should be detected
+
+# MD5 hashes
+d41d8cd98f00b204e9800998ecf8427e
+5d41402abc4b2a76b9719d911017c592
+
+# SHA1 hashes
+da39a3ee5e6b4b0d3255bfef95601890afd80709
+356a192b7913b04c54574d18c28d46e6395428ab
+
+# SHA256 hashes
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+2c624232cdd22181bdd8442b64d5e8b0f8a3c78caf7b4a8f79c3a2f2e4b4d4c4
+
+# Base64 encoded data
+SGVsbG8gV29ybGQ=
+VGhpcyBpcyBhIHRlc3Q=
+QWJjZGVmZ2hpams=
+
+# UUIDs
+550e8400-e29b-41d4-a716-446655440000
+6ba7b810-9dad-11d1-80b4-00c04fd430c8
+6ba7b811-9dad-11d1-80b4-00c04fd430c8
+
+# URLs
+https://www.example.com
+http://test.example.org/path?param=value
+ftp://files.example.net/data.txt
+
+# Email addresses
+test@example.com
+user.name@domain.co.uk
+admin@subdomain.example.org
+
+# Phone numbers
++1-555-123-4567
+(555) 123-4567
+555.123.4567
+
+# Credit card numbers (test data)
+4111111111111111
+5555555555554444
+378282246310005
+
+# JWT tokens (test data)
+eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c
+
+# Hex data
+48656c6c6f20576f726c64
+5468697320697320612074657374
+
+# Binary data (as hex)
+0102030405060708090a0b0c0d0e0f

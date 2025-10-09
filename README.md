@@ -9,6 +9,17 @@ You can either use a generic version or as a plugin for the Volatility framework
 Changelog
 --------
 
+Version 0.9.0
+--------
+* Python 3 migration: updaedimports, print functions, string/bytes handling
+* Refactoring: split monolithic detection into focused functions; added `PatternMatcher`
+* Error handling: comprehensive try/except around file IO, decoding, and processing
+* Type hints & docs: pervasive typing and improved docstrings for maintainability
+* Performance: compiled regexes with UNICODE/VERBOSE, quick hash pre-checks, chunked processing, mmap for large files
+* Modern Python: `@dataclass` for `Finding`, `pathlib.Path`, f-strings, constants with annotations
+* Testing: comprehensive unittest suite in `tests/`, sample data in `tests/test.txt`, runner at `tests/run_tests.py`
+* Configuration: Added support for JSON and YAML configuration files to customise default settings
+
 Version 0.8.2
 --------
 * Added detection for JWT tokens
@@ -237,8 +248,8 @@ Generic version:
 			    <struct format string> interpret bytes as packed
 			    binary data. Unpacks contents from different data and
 			    endianess types according to format strings patterns
-			    as specified on:
-			    https://docs.python.org/2/library/struct.html
+            as specified on:
+            https://docs.python.org/3/library/struct.html
       -g GENERATOR, -generator GENERATOR
 			    find encoding/decoding algorithm that exposes
 			    interesting artifacts (choose: 'encode', 'decode',
@@ -321,7 +332,23 @@ As a Volatility v2.0 plugin:
 Requirements
 ------------
 
-python v2.4 - 2.7
+Python 3.8+
+
+
+Testing
+-------
+
+Run the unittest suite from the project root (tests are under `tests/`):
+
+    $ python3 tests/run_tests.py -v
+
+Alternatively, using unittest discovery directly:
+
+    $ python3 -m unittest discover -s tests -p 'test_*.py' -v
+
+Notes:
+- The test runner ensures the project root is on `PYTHONPATH`.
+- Test data and integration samples live in `tests/test.txt`.
 
 
 Discussion

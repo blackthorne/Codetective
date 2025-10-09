@@ -1,0 +1,23 @@
+# Testing dependencies for Codetective
+# Install with: pip install -r requirements-test.txt
+
+# Core testing framework (included in Python standard library)
+# unittest - built-in testing framework
+
+# Optional: Coverage reporting
+coverage>=6.0
+
+# Optional: Additional testing utilities
+pytest>=7.0.0
+pytest-cov>=4.0.0
+
+# Optional: Mock utilities (included in Python 3.3+)
+# unittest.mock - built-in mocking framework
+
+# Optional: Performance testing
+pytest-benchmark>=4.0.0
+
+# Optional: Code quality
+flake8>=5.0.0
+black>=22.0.0
+mypy>=1.0.0
