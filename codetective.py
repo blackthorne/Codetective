@@ -1,13 +1,10 @@
 #!/usr/bin/env python3
 # encoding: utf-8
 """
-Codetective - A tool to determine crypto/encoding algorithms from their representation traces.
-
-This tool analyzes various data formats to identify cryptographic hashes, 
-encodings, and other artifacts commonly found in security analysis.
+Codetective - a tool to identify cryptographic hashes, encodings, and other artifacts in a byte stream according to traces of its representation
 """
 
-__description__ = 'a tool to determine the crypto/encoding algorithm in a byte stream according to traces of its representation'
+__description__ = 'a tool to identify cryptographic hashes, encodings, and other artifacts in a byte stream according to traces of its representation'
 __author__ = 'Francisco da G. T. Ribeiro'
 __version__ = '0.9.0'
 __license__ = 'GPL'
