@@ -6,7 +6,7 @@ Codetective - a tool to identify cryptographic hashes, encodings, and other arti
 
 __description__ = 'a tool to identify cryptographic hashes, encodings, and other artifacts in a byte stream according to traces of its representation'
 __author__ = 'Francisco da G. T. Ribeiro'
-__version__ = '0.9.0'
+__version__ = '0.9.1'
 __license__ = 'GPL'
 
 # Configuration constants

@@ -1,4 +1,3 @@
-# broken
 import volatility.obj as obj
 import volatility.commands
 import volatility.utils as utils
