@@ -9,6 +9,11 @@ You can either use a generic version or as a plugin for the Volatility framework
 Changelog
 --------
 
+Version 0.9.1
+--------
+* Added mypy tests
+* All linting, type errors and indentation consistency issues resolved
+
 Version 0.9.0
 --------
 * Python 3 migration: updated imports, print functions, string/bytes handling

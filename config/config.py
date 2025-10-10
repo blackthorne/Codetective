@@ -9,9 +9,9 @@ environment variables, and command-line arguments.
 
 import os
 import json
-import yaml
+import yaml  # type: ignore[import-untyped]
+from typing import Any, Dict, Optional, List, Callable
 from pathlib import Path
-from typing import Dict, Any, Optional, List
 from dataclasses import dataclass, field
 from enum import Enum
 
@@ -136,18 +136,18 @@ class ConfigManager:
                 self._load_from_file(str(location))
                 break
     
-    def _load_from_file(self, file_path: str) -> None:
+    def _load_from_file(self, file_path: Any) -> None:
         """Load configuration from a file."""
-        file_path = Path(file_path)
+        path = Path(file_path)
         
-        if not file_path.exists():
+        if not path.exists():
             return
         
         try:
-            with open(file_path, 'r', encoding='utf-8') as f:
-                if file_path.suffix.lower() in ['.yaml', '.yml']:
+            with open(path, 'r', encoding='utf-8') as f:
+                if path.suffix.lower() in ['.yaml', '.yml']:
                     data = yaml.safe_load(f)
-                elif file_path.suffix.lower() == '.json':
+                elif path.suffix.lower() == '.json':
                     data = json.load(f)
                 else:
                     return
@@ -158,7 +158,7 @@ class ConfigManager:
     
     def _load_from_environment(self) -> None:
         """Load configuration from environment variables."""
-        env_mappings = {
+        env_mappings: Dict[str, tuple[str, Callable[[str], Any]]] = {
             'CODETECTIVE_MIN_ENTROPY': ('detection.min_entropy', float),
             'CODETECTIVE_MIN_CERTAINTY': ('detection.min_certainty', int),
             'CODETECTIVE_MAX_FILE_SIZE': ('file_processing.max_file_size', int),
@@ -226,14 +226,14 @@ class ConfigManager:
         """Get the current configuration."""
         return self.config
     
-    def save_config(self, file_path: str, format: ConfigFormat = ConfigFormat.JSON) -> None:
+    def save_config(self, file_path: Any, format: ConfigFormat = ConfigFormat.JSON) -> None:
         """Save the current configuration to a file."""
-        file_path = Path(file_path)
-        file_path.parent.mkdir(parents=True, exist_ok=True)
+        path = Path(file_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
         
         config_dict = self._config_to_dict()
         
-        with open(file_path, 'w', encoding='utf-8') as f:
+        with open(path, 'w', encoding='utf-8') as f:
             if format == ConfigFormat.JSON:
                 json.dump(config_dict, f, indent=2, sort_keys=True)
             elif format == ConfigFormat.YAML:

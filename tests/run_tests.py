@@ -8,6 +8,7 @@ If no tests are found, exits successfully after a helpful message.
 
 import argparse
 import sys
+import subprocess
 import unittest
 from pathlib import Path
 
@@ -34,6 +35,29 @@ def run_tests(start_dir: str, pattern: str, verbose: bool) -> bool:
     suite = discover_tests(str(default_dir), pattern)
     runner = unittest.TextTestRunner(verbosity=2 if verbose else 1)
     result = runner.run(suite)
+
+    # Always run mypy type checks by default
+    mypy_cfg = tests_dir / "mypy.ini"
+    codetective_file = project_root / "codetective.py"
+    config_file = project_root / "config" / "config.py"
+    mypy_cmd = [
+        sys.executable,
+        "-m",
+        "mypy",
+        "--config-file",
+        str(mypy_cfg),
+        "--no-namespace-packages",
+        str(codetective_file),
+        str(config_file),
+    ]
+    try:
+        print("Running mypy type checks...")
+        cp = subprocess.run(mypy_cmd, check=False)
+        if cp.returncode != 0:
+            print("mypy reported issues. See output above.")
+            return False
+    except FileNotFoundError:
+        print("mypy is not installed. Install with: pip install mypy")
 
     # If no tests were run, print a friendly note but still succeed
     if result.testsRun == 0 and not result.errors and not result.failures:

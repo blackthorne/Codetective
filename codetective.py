@@ -31,27 +31,15 @@ import fnmatch
 import binascii
 from collections import Counter
 from datetime import datetime
-from typing import List, Dict, Optional, Tuple, Any, Union, Iterator
+from typing import List, Dict, Optional, Tuple, Any, Union, Iterator, Callable, Iterable, cast
 from urllib.parse import urlparse
 from encodings import aliases
 from dataclasses import dataclass, field
 from pathlib import Path
 
 # Import configuration system
-try:
-    from config import ConfigManager, CodetectiveConfig, ConfigFormat
-    CONFIG_AVAILABLE = True
-except ImportError:
-    CONFIG_AVAILABLE = False
-    # Fallback configuration class
-    @dataclass
-    class CodetectiveConfig:
-        min_entropy: float = 3.3
-        max_file_window_size: int = 1_000_000
-        max_overlap_window_size: int = 5_000
-        min_av: int = 5
-        max_preprocess_errors: int = 20
-        bad_chars: str = "\n\r-"
+from config.config import ConfigManager, CodetectiveConfig
+CONFIG_AVAILABLE = True
 
 ########################################################################
 @dataclass
@@ -61,23 +49,24 @@ class Finding:
 	"""
 	type: str
 	payload: Any
-	location: Optional[Tuple[int, Tuple[int, int]]] = None
-	certainty: Optional[int] = None
+	location: Union[int, Tuple[int, Tuple[int, int]], None] = None
+	certainty: int = 0
 	details: Optional[str] = None
 	created_on: datetime = field(default_factory=datetime.now)
 	
 	def __post_init__(self) -> None:
 		"""Initialize computed fields after dataclass initialization."""
-		if self.location:
-			# Safely unpack (base_offset, (start, end)) and compute absolute location and size
+		# Normalize certainty to int
+		self.certainty = int(self.certainty or 0)
+		if isinstance(self.location, tuple):
+			# legacy callers provide (base, (start, end))
 			base_offset, span = self.location
 			start, end = span
 			self.location = base_offset + start
 			self.size = end - start if end >= start else 0
 		else:
-			self.location = 0
+			self.location = int(self.location or 0)
 			self.size = 0
-		self.certainty = self.certainty or 0
 		self.details = self.details or ""
 	
 	@property
@@ -88,8 +77,8 @@ class Finding:
 		elif self.certainty >= 60:
 			return 'likely'
 		else:
-			return 'possible'
-	
+			return 'possible'	
+		
 	def __str__(self) -> str:
 		"""String representation of the finding."""
 		return f"{self.details}  [{self.confidence}]"
@@ -337,24 +326,21 @@ def _detect_secrets(sub_text: str, base_location: int) -> List[Finding]:
 	"""Detect potential secrets in the text."""
 	results = []
 	
-	for line in sub_text.replace("\\n", "\n").splitlines():
+	for line in sub_text.replace("\n", "\n").splitlines():
 		for finding in reg_find('secret', line):
 			data, location = finding.group(), (base_location, finding.span())
-			
 			for keyword in ['pass', 'key', 'security']:
 				if keyword and keyword in line.lower():
 					secret_find = Finding('secret', finding.group(), location, 45, f'Secret: {finding.group()}')
 					stripped_secret = finding.group().strip('"').strip("'").strip()
-					
 					# Check for common false positives
 					common_false_positives = ['/', '-', 'keystore_', '{{', '$', 'secret', 'ConfigMap', '[', 'true', 'false']
 					for false_positive in common_false_positives:
 						if stripped_secret.lower().startswith(false_positive.lower()):
 							secret_find.certainty -= 25
-					
+					# Entropy as a positive signal
 					if entropy(finding.group()) > MIN_ENTROPY:
 						secret_find.certainty += 40
-					
 					results.append(secret_find)
 	
 	return results
@@ -366,7 +352,6 @@ def _detect_web_cookies(sub_text: str, base_location: int) -> List[Finding]:
 	
 	for finding in reg_find('web-cookie', sub_text):
 		data, location = finding.group(), (base_location, finding.span())
-		
 		if len(data) > 2:
 			cookie_find = Finding(
 				'web-cookie', 
@@ -375,11 +360,9 @@ def _detect_web_cookies(sub_text: str, base_location: int) -> List[Finding]:
 				45, 
 				f'Web cookie name: {finding.groups()[0]}\n\t\tvalue: {finding.groups()[1]}'
 			)
-			
 			if (any(cookie for cookie in known_cookies if cookie.lower() in finding.groups()[0].lower()) and 
 				entropy(finding.groups()[1]) > MIN_ENTROPY):
 				cookie_find.certainty += 40
-			
 			results.append(cookie_find)
 	
 	return results
@@ -457,7 +440,7 @@ def _detect_credit_cards(sub_text: str, base_location: int) -> List[Finding]:
 			credit_find.details = f'Credit card number: {credit_find.payload}\n\tCredit card type: American Express'
 		# Diners Club
 		elif re.findall(r"3(?:0[0-5]|[68][0-9])[0-9]{11}", data):
-			credit_find.payload = re.findall(r"3(?:0[0-5]|[68][0-9])[0-9]{11}", data)[0]
+			credit_find.payload = re.findall(r"3(?:0[0-5]|[68][0-9])[0-9]{11}", data)[0]			
 			credit_find.details = f'Credit card number: {credit_find.payload}\n\tCredit card type: Diners Club'
 		# Discover
 		elif re.findall(r"6(?:011|5[0-9]{2})[0-9]{12}", data):
@@ -539,7 +522,7 @@ def _detect_database_hashes(sub_text: str, base_location: int) -> List[Finding]:
 				55, 
 				f'Microsoft SQL Server 2000\n\t\theader: 0x0100\n\t\tsalt: {salt}\n\t\tmixed case hash (SHA1): {mixed_hash}\n\t\tupper case hash (SHA1): {upper_hash}'
 			)
-			
+
 			if re.match(r"\b0x0100[a-fA-F\d]{88}\b", data):
 				mssql2000_find.certainty += 40
 			elif re.match(r"\b[a-fA-F\d]{88}\b", data) and entropy(mixed_hash) > MIN_ENTROPY:
@@ -1086,10 +1069,10 @@ def run_validators(results: List[Finding], validators: List[str]) -> List[Findin
 	Returns:
 		Filtered list of findings
 	"""
-	final_results = []
+	final_results: List[Finding] = []
 	
-	for validator in validators:
-		validator_func = None
+	for validator in validators:		
+		validator_func: Callable[[Iterable[object]], bool] | re.Pattern[str] | None = None
 		validator_type = None
 		mode = validator.split(':')[0].lower()
 		
@@ -1097,14 +1080,14 @@ def run_validators(results: List[Finding], validators: List[str]) -> List[Findin
 			validator_func = all
 		elif mode == 'has':
 			validator_func = any
-		elif mode == 'search':
+		elif mode == 'search':			
 			validator_func = re.compile(validator.split(':')[1])
 		else:
 			print('Invalid validator provided.')
 			continue
-		
+			
 		validator_type = validator.split(':')[1].upper()
-		
+
 		for result in results:
 			payload = None
 			
@@ -1116,29 +1099,29 @@ def run_validators(results: List[Finding], validators: List[str]) -> List[Findin
 			payload = re.sub(f'[{BAD_CHARS}]', '', payload)
 			
 			if validator_type == 'NUMERIC':
-				if validator_func(c.isdigit() for c in payload):
-					final_results.append(result)
+				if callable(validator_func) and validator_func(c.isdigit() for c in payload):
+					final_results.append(result) 
 			elif validator_type == 'ALPHA':
-				if validator_func(c.isalpha() for c in payload):
+				if callable(validator_func) and validator_func(c.isalpha() for c in payload):
 					final_results.append(result)
 			elif validator_type == 'LOWER':
-				if validator_func(c.islower() for c in payload):
-					final_results.append(result)
+				if callable(validator_func) and validator_func(c.islower() for c in payload):
+					final_results.append(result)	
 			elif validator_type == 'UPPER':
-				if validator_func(c.isupper() for c in payload):
-					final_results.append(result)
+				if callable(validator_func) and validator_func(c.isupper() for c in payload):
+					final_results.append(result)	
 			elif validator_type == 'ALPHANUMERIC':
-				if validator_func(c.isalnum() for c in payload):
+				if callable(validator_func) and validator_func(c.isalnum() for c in payload):
 					final_results.append(result)
 			elif validator_type == 'SYMBOL':
-				if validator_func(not c.isalnum() for c in payload):
-					final_results.append(result)
+				if callable(validator_func) and validator_func(not c.isalnum() for c in payload):
+					final_results.append(result)	
 			else:
-				if validator_func.search(payload):
+				if isinstance(validator_func, re.Pattern) and validator_func.search(payload):
 					final_results.append(result)
-	
+					
 	return final_results
-
+	
 def show_results(results: List[Finding], show_details: bool, validators: List[str], min_certainty: int) -> None:
 	"""
 	Display the results in a formatted way.
@@ -1150,7 +1133,7 @@ def show_results(results: List[Finding], show_details: bool, validators: List[st
 		min_certainty: Minimum certainty level to display
 	"""
 	if min_certainty > 0:
-		results = [finding for finding in results if finding.certainty >= min_certainty]
+		results = [finding for finding in results if (finding.certainty or 0) >= min_certainty] 
 	
 	if validators:
 		results = run_validators(results, validators)
@@ -1230,7 +1213,7 @@ def pre_process(data: bytes, struct_fmt_string: str) -> str:
 	processed_content = ''
 	
 	while True:
-		try:
+		try:	
 			# Check if we're at the end of the stream
 			if stream.tell() >= len(data):
 				break
@@ -1241,11 +1224,11 @@ def pre_process(data: bytes, struct_fmt_string: str) -> str:
 			processed_content += result
 		except (TypeError, struct.error):
 			break
-	
+
 	return processed_content
 
 def test_encoding(data: str, filters: List[str], analyze: bool, validators: List[str], 
-                 verbose: bool, mode: str, min_certainty: int) -> None:
+			 verbose: bool, mode: str, min_certainty: int) -> None:
 	"""
 	Test various encodings/decodings on the data.
 	
@@ -1334,7 +1317,7 @@ def process_file(filename: str, args, validators: List[str], min_certainty: int)
 		print(f"Error: Unexpected error processing file '{filename}': {e}")
 
 def process_file_streaming(filename: str, args, validators: List[str], min_certainty: int, 
-                          file_window_size: int, overlap_window_size: int) -> None:
+					  file_window_size: int, overlap_window_size: int) -> None:
 	"""Process file using streaming approach for medium-sized files."""
 	with open(filename, 'rb') as fl:
 		file_size = Path(filename).stat().st_size
@@ -1379,7 +1362,7 @@ def process_file_streaming(filename: str, args, validators: List[str], min_certa
 				continue
 
 def process_large_file_mmap(filename: str, args, validators: List[str], min_certainty: int,
-                           file_window_size: int, overlap_window_size: int) -> None:
+					 file_window_size: int, overlap_window_size: int) -> None:
 	"""Process large files using memory mapping for better memory efficiency."""
 	import mmap
 	
@@ -1431,7 +1414,8 @@ def process_chunk(content: bytes, args, validators: List[str], min_certainty: in
 	try:
 		if args.preprocessor and len(args.preprocessor) == 1:
 			try:
-				content = pre_process(content, args.preprocessor[0])
+				processed = pre_process(content, args.preprocessor[0])
+				content = processed.encode('utf-8', errors='ignore')
 			except (struct.error, ValueError) as e:
 				if args.verbose:
 					print(f"Warning: Failed to preprocess data: {e}")
@@ -1485,7 +1469,7 @@ def main() -> None:
 		)
 		
 		parser.add_argument('string', type=str, nargs='?',
-		                   help='determine algorithm used for <string> according to its data representation')
+	                    help='determine algorithm used for <string> according to its data representation')
 		parser.add_argument('-t', metavar='filters', 
 		                   default=['win', 'web', 'unix', 'db', 'personal', 'crypto', 'other'], 
 		                   type=str, nargs=1, dest='filters',
@@ -1551,10 +1535,8 @@ def main() -> None:
 		elif args.string is not None:
 			try:
 				data = args.string
-				
 				if args.preprocessor and len(args.preprocessor) == 1:
 					data = pre_process(data.encode(), args.preprocessor[0])
-				
 				if args.generator:
 					test_encoding(data, args.filters, args.analyze, validators, args.verbose, args.generator[0], min_certainty)
 				else:
@@ -1574,7 +1556,6 @@ def main() -> None:
 				if not file_list:
 					print(f"No files found matching pattern '{file_pattern}' in directory '{target_directory}'")
 					return
-				
 				for file in file_list:
 					print(f"== file: {file}")
 					process_file(file, args, validators, min_certainty)
@@ -1587,7 +1568,6 @@ def main() -> None:
 				for line_num, data in enumerate(sys.stdin, 1):
 					if args.preprocessor and len(args.preprocessor) == 1:
 						data = pre_process(data.encode(), args.preprocessor[0])
-					
 					if args.generator:
 						test_encoding(data, args.filters, args.analyze, validators, args.verbose, args.generator[0], min_certainty)
 					else:
@@ -1603,7 +1583,7 @@ def main() -> None:
 		
 		else:
 			parser.print_help()
-			
+
 	except KeyboardInterrupt:
 		print("\nInterrupted by user.")
 	except Exception as e:
