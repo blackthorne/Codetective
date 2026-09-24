@@ -1,44 +1,121 @@
 Codetective
 =============
-Sometimes we run into hashes and other artefacts and can't figure out where did they come from and how they were generated. This tool is able to recognise the output format of many different algorithms in many different possible encodings for analysis purposes. It also infers the levels of certainty for each finding based on traces of its representation .
+Sometimes we run into hashes and other artefacts and can't figure out where they came from or how they were generated. Codetective recognises the output format of many different algorithms, in many different possible encodings, for analysis purposes. It also infers a level of certainty for each finding based on traces of its representation.
 
-This may be useful e.g. when you are testing systems from a security perspective and are able to grab a password file with hashed contents maybe from an exposed backup file or by dumping memory. This may also be useful as a part of a fingerprinting process or simply to verify valid implementations of different algorithms. You may also try running this tool against network traffic captures or large source code repositories to look out for interesting stuff.
+This may be useful, for example, when you are testing systems from a security perspective and grab a password file with hashed contents from an exposed backup or a memory dump. It can also be part of a fingerprinting process, or simply a way to verify implementations of different algorithms. You can run it against network traffic captures or large source code repositories to look for interesting stuff.
 
-You can either use a generic version or as a plugin for the Volatility framework. The usage is similar.
+Since version 0.9.2 Codetective can also go one step further and **crack** the input: it automatically tries encodings, classical ciphers and chains of them (e.g. base64 → Bacon, or base64 → ROT13) and ranks the candidates by how much they look like real text or a CTF flag.
 
-Changelog
+You can use it standalone or as a plugin for the Volatility framework. The usage is similar.
+
+Features
 --------
+* **Identify** hashes, encodings and secrets: Windows (LM, NTLM, SAM), Unix shadow formats, web frameworks (Django, Joomla, phpBB3, WordPress), databases (MySQL, MSSQL), SHA/MD families, CRC, UUIDs, JWTs, base64, URLs, web cookies, phone numbers, credit cards and secrets in code. Each finding comes with a certainty score (0-100).
+* **Crack** encoded or enciphered text (`-c`): base64/32/85, hex, binary, Morse, URL encoding and 25+ other encodings; Caesar/ROT variants, Vigenère, Beaufort, autokey, Gronsfeld, Porta, affine, Atbash, Bacon (24 and 26 letter), rail fence, columnar/scytale transposition, XOR (all single-byte keys) and more, up to 3 layers deep, using all CPU cores.
+* **Scan** files, whole directories (recursively) or standard input. Large files are processed in overlapping chunks (with mmap) so memory stays bounded.
+* **Filter** results by source (`-t`), minimum certainty (`-m`) or custom validators (`-v1..-v3`).
+* **Preprocess** binary structures with `struct` format strings (`-p`) and try every codec available in Python (`-g`).
+* **Configure** defaults through JSON/YAML configuration files (`--config`, see `config/CONFIGURATION.md`).
 
-Version 0.9.1
---------
-* Added mypy tests
-* All linting, type errors and indentation consistency issues resolved
+Requirements
+------------
+Python 3.8+. No third-party packages are needed for normal use.
 
-Version 0.9.0
---------
-* Python 3 migration: updated imports, print functions, string/bytes handling
-* Refactoring: split monolithic detection into focused functions; added `PatternMatcher`
-* Error handling: comprehensive try/except around file IO, decoding, and processing
-* Type hints & docs: pervasive typing and improved docstrings for maintainability
-* Performance: compiled regexes with UNICODE/VERBOSE, quick hash pre-checks, chunked processing, mmap for large files
-* Modern Python: `@dataclass` for `Finding`, `pathlib.Path`, f-strings, constants with annotations
-* Testing: comprehensive unittest suite in `tests/`, sample data in `tests/test.txt`, runner at `tests/run_tests.py`
-* Configuration: Added support for JSON and YAML configuration files to customise default settings
+Quick start
+-----------
 
-Version 0.8.2
---------
-* Added detection for JWT tokens
-* Added generic secrets detection
+Identify a hash:
 
-Version 0.8.1
---------
-Finally a new version of Codetective is ready. This is close to a complete re-write with new features and many, many bug fixes. The code is still not something to look at but it’s now a lot more object oriented and easier to maintain. Now, codetective can also report the exact location of a finding and the ‘certainty’ feature is now numeric in order to include multiple factors with different weights and become more precise. The new entropy checks added to better detect cryptographic findings also take advantage of this and you can limit results being displayed only to findings with a specified minimum level of certainty (-m number).
-A different approach regarding the way data is loaded into memory has been adopted so now Codetective will break data into slices and analyse them by turn. This is to prevent it from filling the memory when reading large files. To prevent losing results there is now an overlapping window which will make sure no findings are caught in the breaks (*). A verbose mode was also added, it’s now possible to see the progress status which can be useful for the longer runs.
+	$ python3 codetective.py '79b61b093c3c063fd45f03d55493902f'
 
-Directory mode (-d rootPath) allows you to tell Codetective to look at folders rather than files and you can use it in recursive mode (-r) as well. if applied to large amounts of data, it might be useful to filter outputs by minimum certainty level e.g. -m 70. It also supports reading data from standard input.
+Scan a directory recursively, showing only confident findings:
 
-A new filter was added called ‘personal’ and can be used for findings that may include personal data such as phone numbers and credit cards which are now supported as well. Other algorithms supported in the new version include web cookies, URLs and with the ‘generator’ option, Codetective will try to load all encoding/decoding supported by your Python environment (the ‘aliases’ module) and apply them in order to find something meaningful. This can be used to try multiple encoding (-g encode) or decodings (-g decode) or both (-g both). Preprocessors (-p) now allow binary structures to be first converted onto strings using the C struct packing string patterns. 
-Finally, the ‘validators’ function now provides a powerful way to filter outputs. You may use up to 3 validators per run using the -v1 -v2 -v3 parameters respectively. Each validator it is a combination of a predicate ‘ALL’ or ‘HAS’ with a matching function such as UPPER for findings in upper case. Functions currently supported are :
+	$ python3 codetective.py -r -d mypath/ -m 80
+
+Crack a string, a file or standard input:
+
+	$ python3 codetective.py -c 'synt{ebg13_vf_rnfl}'
+	$ python3 codetective.py -c -f challenge.txt
+	$ echo 'SGVsbG8gV29ybGQh' | python3 codetective.py -c -s
+
+Always wrap strings in single quotes so your shell doesn't interpret characters such as `!`, `$` or `{}`.
+
+Crack mode
+----------
+With `-c` Codetective stops trying to *identify* the input and tries to *decode* it instead. It detects the input format (hex, base64, binary, ...), tries every supported encoding and cipher with all their built-in parameters, then chains the most promising results into further layers. Every candidate is scored 0-100 on:
+
+* dictionary word coverage, including unspaced text (`DAYONEOFEIGHTY` reads as `DAY ONE OF EIGHTY`)
+* English letter frequencies (chi-squared), index of coincidence, common bigrams/trigrams
+* CTF flag formats such as `flag{...}`, `CTF{...}`, `picoCTF{...}`, `HTB{...}` (big bonus)
+* penalties for unprintable characters, random-looking case (`iAYguAnOR`) and repetitive garbage
+
+Example with a two-layer puzzle (base64 of a Baconian cipher):
+
+	$ python3 codetective.py -c -f input.txt
+	Cracking 96 characters (depth 2, min score 25)...
+	This can take a while at depth 3+. Use -v to see solver progress.
+
+	Finished in 5.7s - 3 candidate(s)
+
+	1. [72/100] input_base64 → bacon_cipher
+	   decoded:  DAYONEOFEIGHTY
+	   reads as: DAY ONE OF EIGHTY
+	...
+
+	$ python3 codetective.py -c 'synt{ebg13_vf_rnfl}'
+	1. [100/100] rot13
+	   decoded:  flag{rot13_is_easy}
+	   flag:     flag{rot13_is_easy}
+	...
+
+Options:
+
+| Option | Default | Description |
+|---|---|---|
+| `-c`, `-crack` | off | Decode the input (string, `-f` file or `-s` stdin) instead of identifying it |
+| `-cd`, `-crack-depth` | 2 | Maximum number of chained layers (1-3). Depth 3 takes minutes rather than seconds |
+| `-ct`, `-crack-top` | 5 | Number of candidates to show |
+| `-cm`, `-crack-min-score` | 25 | Minimum plausibility score; lower it to see weaker candidates |
+| `-cr`, `-crack-regex` | none | Regex the answer should match, e.g. `'HTB\{.*\}'`; matching candidates get a +40 boost |
+| `-cc`, `-crack-cores` | all but one | Worker processes; `1` disables multiprocessing |
+| `-v` | off | Show the solver's full progress output |
+
+Tips:
+
+* To search harder, combine a higher depth, a lower threshold and more results: `-cd 3 -cm 15 -ct 15`.
+* If you know the flag format, `-cr` is usually more effective than searching deeper.
+* Keyed ciphers (Vigenère, Beaufort, ...) are tried with a built-in list of ~200 common keywords, so an unusual key will not be found by brute force.
+* In crack mode `-f` reads the whole file as a single ciphertext. Trailing newlines are ignored.
+
+The crack engine lives in `crypto_toolkit.py` and can also be used as a library:
+
+```python
+from crypto_toolkit import solve_challenge
+
+if __name__ == '__main__':  # required for multiprocessing
+    results = solve_challenge(open('input.txt').read(), max_depth=2)
+    for r in results[:3]:
+        print(r['score'], r['method'], r['decoded'])
+```
+
+Identification mode
+-------------------
+Supported filters (`-t`) are: `win`, `web`, `unix`, `db`, `personal`, `crypto` and `other`. Results improve with filters: if you know the data comes from a web application, Codetective will be more confident about framework formats such as Joomla or Django.
+
+Supported algorithms and artefacts:
+
+* web-cookie, URL, JWT, secrets in code, uuid
+* md4, md5, sha1, sha224, sha256, sha384, sha512, RipeMD320, whirlpool, CRC
+* lm hash, ntlm hash, SAM(\*:ntlm), SAM(lm:\*), SAM(lm:ntlm)
+* mssql2000, mssql2005, MySQL323, MySQL4+
+* des-salt-unix, md5-salt-unix, apr1-salt-unix, sha256-salt-unix, sha512-salt-unix, blowfish-salt-unix
+* sha256-django, sha256-salt-django, sha384-django, sha384-salt-django
+* md5-wordpress, md5-phpBB3, md5-joomla1, md5-salt-joomla1, md5-joomla2, md5-salt-joomla2
+* base64
+* phone numbers, credit cards
+
+### Validators
+Validators filter the output. You may use up to 3 per run with `-v1`, `-v2` and `-v3`. Each validator combines a predicate, `ALL` or `HAS`, with a matching function such as `UPPER` for findings in upper case. Supported functions:
 
 * NUMERIC
 * ALPHA
@@ -47,277 +124,138 @@ Finally, the ‘validators’ function now provides a powerful way to filter out
 * ALPHANUMERIC
 * SYMBOL
 
-For a custom validator you can also provide your own regular expression using the predicate SEARCH followed by the desired regular expression.
+For a custom validator, use the predicate `SEARCH` followed by a regular expression.
 
-(*) - you may have duplicate results because of this but will be addressed in future.
+### Generator and preprocessors
+With the generator option Codetective loads every codec supported by your Python environment (the `aliases` module) and applies them to find something meaningful: multiple encodings (`-g encode`), decodings (`-g decode`) or both (`-g both`). Preprocessors (`-p`) convert binary structures into strings first, using C struct format strings.
 
-Supported filters are: win, web, unix, db, personal, crypto and other.
-* web-cookie
-* mssql2000
-* md5
-* URL
-* md4
-* phone number
-* credit cards
-* mssql2005
-* lm hash
-* ntlm hash
-* MySQL4+
-* MySQL323
-* base64
-* SAM(*:ntlm)
-* SAM(lm:*)
-* SAM(lm:ntlm)
-* RipeMD320
-* sha1
-* sha224
-* sha256
-* sha384
-* sha512
-* whirpool
-* CRC
-* des-salt-unix
-* sha256-salt-django
-* sha256-django
-* sha384-salt-django
-* sha384-django
-* sha256-salt-unix
-* sha512-salt-unix
-* apr1-salt-unix
-* md5-salt-unix
-* md5-wordpress
-* md5-phpBB3
-* md5-joomla2
-* md5-salt-joomla2
-* md5-joomla1
-* md5-salt-joomla1
-* blowfish-salt-unix
-* uuid
-* JWT
-* secrets in code
+### Large files and directories
+Data is broken into slices and analysed in turn so that large files don't fill memory. An overlapping window makes sure no findings are lost at slice boundaries; as a side effect you may see duplicate results. Directory mode (`-d rootPath`) looks at folders rather than files and supports recursion (`-r`). On large amounts of data, filter by minimum certainty, e.g. `-m 70`.
 
 Examples
 --------
 
-	$ python codetective.py -r -d mypath/ -m 80
+	$ python3 codetective.py '79b61b093c3c063fd45f03d55493902f'
+	Joomla v2 MD5 - hash: 79b61b093c3c063fd45f03d55493902f
+	Joomla v1 MD5 - hash: 79b61b093c3c063fd45f03d55493902f
+	MD4 hash: 79b61b093c3c063fd45f03d55493902f
+	MD5 hash: 79b61b093c3c063fd45f03d55493902f
+	base64 decoded string: ...
+	LM hash: 79b61b093c3c063fd45f03d55493902f
+	NTLM hash: 79b61b093c3c063fd45f03d55493902f
 
+Filtering by source narrows the candidates down:
 
-Examples (old)
---------
+	$ python3 codetective.py -t win '79B61B093C3C063FD45F03D55493902F:*'
+	LM hash: 79B61B093C3C063FD45F03D55493902F
+	NTLM hash: 79B61B093C3C063FD45F03D55493902F
+	hashes in SAM file - LM: 79B61B093C3C063FD45F03D55493902F	NTLM: not defined
 
-	$ python codetective.py '79b61b093c3c063fd45f03d55493902f'
-	confident: ['md5']
-	likely: ['lm', 'ntlm', 'md5-joomla2', 'md5-joomla1']
-	possible: ['md4', 'base64']
+`-a` adds the type, location, certainty level and score, and detection time of each finding:
 
-	$ python codetective.py '79B61B093C3C063FD45F03D55493902F'
-	confident: ['md5', 'lm', 'ntlm']
-	possible: ['md4', 'base64']
+	$ python3 codetective.py -a -t win '79B61B093C3C063FD45F03D55493902F:*'
+	LM hash: 79B61B093C3C063FD45F03D55493902F	(lm:0:confident[80]:2026-09-24 16:43:15.054584)
+	NTLM hash: 79B61B093C3C063FD45F03D55493902F	(ntlm:0:confident[80]:2026-09-24 16:43:15.054816)
+	hashes in SAM file - LM: 79B61B093C3C063FD45F03D55493902F	NTLM: not defined	(SAM(lm:*):0:likely[70]:2026-09-24 16:43:15.055075)
 
-	$ python codetective.py '79B61B093C3C063FD45F03D55493902F:*'
-	confident: ['md5', 'SAM(lm:*)']
-	likely: ['lm', 'ntlm']
-	possible: ['md4']
+	$ python3 codetective.py 'dGVzdGUK'
+	base64 decoded string: teste
 
-	$ python codetective.py -t win '79B61B093C3C063FD45F03D55493902F:*'
-	confident: ['SAM(lm:*)']
-	likely: ['md5', 'lm', 'ntlm']
-	possible: ['md4']
-
-	$ python codetective.py -a -t win '79B61B093C3C063FD45F03D55493902F:*'
-	confident: ['SAM(lm:*)']
-        	hashes in SAM file - LM:79B61B093C3C063FD45F03D55493902F        NTLM:not defined
-	likely: ['md5', 'lm', 'ntlm']
-	possible: ['md4']
-
-
-	$ python vol.py codetective -n notepad -v -f JOHN-2CF071298B-20120318-024807.raw 
-	Volatile Systems Volatility Framework 2.0
-
-	Found 29 tasks
-	kernel mapping...
-	Calculating task mappings...
-	Process: wuauclt.exe	PPID: 1120	Pid: 1908
-	Process: vmtoolsd.exe	PPID: 688	Pid: 348
-	Process: vmacthlp.exe	PPID: 688	Pid: 912
-    Process: svchost.exe	PPID: 688	Pid: 976
-	Process: smss.exe	PPID: 4	Pid: 384
-	Process: explorer.exe	PPID: 1680	Pid: 1696
-	Process: cmd.exe	PPID: 1696	Pid: 1520
-	Process: svchost.exe	PPID: 688	Pid: 160
-	Process: vmtoolsd.exe	PPID: 1696	Pid: 1820
-	Process: lsass.exe	PPID: 644	Pid: 700
-	Process: services.exe	PPID: 644	Pid: 688
-	Process: alg.exe	PPID: 688	Pid: 1936
-	Process: svchost.exe	PPID: 688	Pid: 924
-	Process: csrss.exe	PPID: 384	Pid: 620
-	Process: svchost.exe	PPID: 688	Pid: 1208
-	Process: TPAutoConnSvc.e	PPID: 688	Pid: 1220
-	Process: spoolsv.exe	PPID: 688	Pid: 1572
-	Process: svchost.exe	PPID: 688	Pid: 1172
-	Process: svchost.exe	PPID: 688	Pid: 1120
-	Process: winlogon.exe	PPID: 384	Pid: 644
-	Process: rundll32.exe	PPID: 1696	Pid: 1788
-	Process: TPAutoConnect.e	PPID: 1220	Pid: 1256
-	Process: notepad.exe	PPID: 1696	Pid: 1896
-	
-	=> at offset Virtual: 0x8012e000  	Physical: 0x12e000    	 Size: 0x1000        
-	 Found md5 (likely) 	MD5 hash: 0A5AE0AB474FF954BA5FB5CC22691599
-	 Found md4 (possible) 	MD4 hash: 0A5AE0AB474FF954BA5FB5CC22691599
-
-	=> at offset Virtual: 0x8013d000  	Physical: 0x13d000    	 Size: 0x1000        
-	 Found md5 (likely) 	MD5 hash: 4BE2C18D9154D0240B36AEF861085FEC
-	 Found md4 (possible) 	MD4 hash: 4BE2C18D9154D0240B36AEF861085FEC
-
-	=> at offset Virtual: 0x80153000  	Physical: 0x153000    	 Size: 0x1000        
-	 Found md5 (likely) 	MD5 hash: 0B79C053C7D38EE4AB9A00CB3B5D2472
-	 Found md4 (possible) 	MD4 hash: 0B79C053C7D38EE4AB9A00CB3B5D2472
-
-	=> at offset Virtual: 0x80171000  	Physical: 0x171000    	 Size: 0x1000        
-	 Found md5 (likely) 	MD5 hash: 10F84F9347B42F6428155C59A743D317
-	 Found md4 (possible) 	MD4 hash: 10F84F9347B42F6428155C59A743D317
-
-	=> at offset Virtual: 0x8018a000  	Physical: 0x18a000    	 Size: 0x1000        
-	 Found md5 (likely) 	MD5 hash: 5046ab8cb6b1ce11920c00aa006c4972
-	 Found md4 (possible) 	MD4 hash: 5046ab8cb6b1ce11920c00aa006c4972
-
-	=> at offset Virtual: 0x801a2000  	Physical: 0x1a2000    	 Size: 0x1000        
-	 Found md5 (likely) 	MD5 hash: C25F308FAE39B3A4D9E1561F679CD8AA
-	 Found md4 (possible) 	MD4 hash: C25F308FAE39B3A4D9E1561F679CD8AA
-	...	
-
-
-
-	$ python codetective.py -a -f test.txt 
-	Administrator:500:CC5E9ACBAD1B25C9AAD3B435B51404EE:996E6760CDDD8815A2C24A110CF040FB::: : {'confident': ['md5', 'SAM(lm:ntlm)'], 'likely': ['lm', 'ntlm'], 'possible': ['md4', 'des-salt-unix']}
-   	     hashes in SAM file - LM:CC5E9ACBAD1B25C9AAD3B435B51404EE        NTLM:996E6760CDDD8815A2C24A110CF040FB
-        	UNIX shadow file using salted DES - salt:Ad     hash:ministrator
-	ibrahim:$1$hanhd/cF$3lzrzB14HceT7uc3oTmog1:14323:0:99999:7::: : {'confident': ['md5-salt-unix'], 'likely': [], 'possible': []}
-        	UNIX shadow file using salted MD5 - salt:hanhd/cF       hash:3lzrzB14HceT7uc3oTmog1
-	563DE3D2F07D0747BBE4BA2697AE33AA : {'confident': ['md5'], 'likely': ['lm', 'ntlm'], 'possible': ['md4', 'base64']}
-		base64 decoded string: ??p?N?Ӿ;8
-	463C8A7593A8A79078CB5C119424E62A : {'confident': ['md5'], 'likely': ['lm', 'ntlm'], 'possible': ['md4', 'base64']}
-        	base64 decoded string: ?????p<?t????-u?????
-	E852191079EA08B654CCF4C2F38A162E3E84EE04 : {'confident': [], 'likely': ['sha1'], 'possible': ['base64']}
-        	base64 decoded string: ?v??t????z瀂??׭??O8M8
-	94F94C9C97BFA92BD267F70E2ABD266B069428C282F30AD521D486A069918925 : {'confident': [], 'likely': ['sha256'], 'possible': ['base64']}
-        	base64 decoded string: ??}?/B??E݁n???Cۮ?ӯx????aw???P??4??u?ݹ
-	sha384$12345678$c0be393a500c7d42b1bd03a1a0a76302f7f472fc132f11ea6373659d0bd8675d04e12d8016d83001c327f0ab70843dd5 : {'confident': [], 'likely': ['sha384', 'sha384-salt-django'], 'possible': []}
-        	Django shadow file using salted SHA384 - salt:12345678  hash:c0be393a500c7d42b1bd03a1a0a76302f7f472fc132f11ea6373659d0bd8675d04e12d8016d83001c327f0ab70843dd5
-	5850478A34D818CE : {'confident': [], 'likely': ['mysql323'], 'possible': ['base64']}
-        	base64 decoded string: ??t?߀????
-        	MySQL v3.23 or previous hash: ['5850478A34D818CE']
-	08EE13E9A295641BE6158366C0651B84A1AD9E47 : {'confident': [], 'likely': ['sha1'], 'possible': ['base64']}
-        	base64 decoded string: ???q=oy?A?y?~?
-                                             N??8P?N;
-	****:7db9d24c238b77af11b99f0a67e99abe  : {'confident': ['md5'], 'likely': ['lm', 'ntlm', 'md5-joomla1'], 'possible': ['md4']}
-        	Joomla v1 MD5 - hash:7db9d24c238b77af11b99f0a67e99abe
-	****:d2f46e7173b1d88c9d7b2f52271cd8af:YEfafQuaj58ExG3V  : {'confident': ['md5', 'md5-salt-joomla1'], 'likely': ['lm', 'ntlm'], 'possible': ['md4']}
-        	Joomla v1 salted MD5 - hash:d2f46e7173b1d88c9d7b2f52271cd8af    salt:YEfafQuaj58ExG3V
-	****:4aad84c0929c72f1c72a9c884e5c0f18:tNT52oL0I8ClmMjO  : {'confident': ['md5', 'md5-salt-joomla1'], 'likely': ['lm', 'ntlm'], 'possible': ['md4']}
-        	Joomla v1 salted MD5 - hash:4aad84c0929c72f1c72a9c884e5c0f18    salt:tNT52oL0I8ClmMjO
-	****:1ad6692b7e3b2deb36606603ced0c8b6:LhiqX4pL3s8xy0qd  : {'confident': ['md5', 'md5-salt-joomla1'], 'likely': ['lm', 'ntlm'], 'possible': ['md4']}
-        	Joomla v1 salted MD5 - hash:1ad6692b7e3b2deb36606603ced0c8b6    salt:LhiqX4pL3s8xy0qd
-	dGVzdGUK : {'confident': [], 'likely': [], 'possible': ['base64']}
-        	base64 decoded string: teste
+	$ python3 codetective.py -r -d mypath/ -m 80 -fp '*.txt'
 
 Usage
 -----
 
-Generic version:
-    usage: codetective.py [-h] [-t filters] [-a] [-v] [-m MIN_CERTAINTY]
-			  [-p PREPROCESSOR] [-g GENERATOR] [-v1 VALIDATOR1]
-			  [-v2 VALIDATOR2] [-v3 VALIDATOR3] [-r] [-f FILENAME]
-			  [-d DIRECTORY] [-fp FILE_PATTERN] [-l] [-s] [-ver]
-			  [string]
+	usage: codetective.py [-h] [-t filters] [-a] [-v] [-m MIN_CERTAINTY]
+	                      [-p PREPROCESSOR] [-g GENERATOR] [-v1 VALIDATOR1]
+	                      [-v2 VALIDATOR2] [-v3 VALIDATOR3] [-r] [-f FILENAME]
+	                      [-d DIRECTORY] [-fp FILE_PATTERN] [-l] [-s] [-ver]
+	                      [--config CONFIG_FILE] [-c] [-cd CRACK_DEPTH]
+	                      [-ct CRACK_TOP] [-cm CRACK_MIN_SCORE] [-cr CRACK_REGEX]
+	                      [-cc CRACK_CORES]
+	                      [string]
 
-    a tool to determine the crypto/encoding algorithm used according to traces of
-    its representation
+	a tool to identify cryptographic hashes, encodings, and other artifacts in a
+	byte stream according to traces of its representation
 
-    positional arguments:
-      string                determine algorithm used for <string> according to its
-			    data representation
+	positional arguments:
+	  string                determine algorithm used for <string> according to its
+	                        data representation
 
-    optional arguments:
-      -h, --help            show this help message and exit
-      -t filters            filter by source of your string. can be: win, web, db,
-			    unix or other
-      -a, -analyze          show more details whenever possible (expands shadow
-			    files fields,...)
-      -v, -verbose          verbose mode shows progress status (useful for large
-			    files) and time taken
-      -m MIN_CERTAINTY, -minimum-certainty MIN_CERTAINTY
-			    specify the minimum acceptable certainty level for
-			    displayed results (0 - 100)
-      -p PREPROCESSOR, --preprocessor PREPROCESSOR
-			    <struct format string> interpret bytes as packed
-			    binary data. Unpacks contents from different data and
-			    endianess types according to format strings patterns
-            as specified on:
-            https://docs.python.org/3/library/struct.html
-      -g GENERATOR, -generator GENERATOR
-			    find encoding/decoding algorithm that exposes
-			    interesting artifacts (choose: 'encode', 'decode',
-			    'both')
-      -v1 VALIDATOR1, -validator1 VALIDATOR1
-			    applies validator 1
-      -v2 VALIDATOR2, -validator2 VALIDATOR2
-			    applies validator 2
-      -v3 VALIDATOR3, -validator3 VALIDATOR3
-			    applies validator 3
-      -r, -recursive        sets recursive mode upon specified directory (current
-			    workdir by default). Consider using it with
-			    min_certainty option
-      -f FILENAME, -file FILENAME
-			    load a specified file
-      -d DIRECTORY, -directory DIRECTORY
-			    load a specified directory
-      -fp FILE_PATTERN, -file-pattern FILE_PATTERN
-			    specified which file pattern to be used with directory
-			    (default: '*')
-      -l, -list             lists supported algorithms
-      -s, -stdin            read data from standard input
-      -ver, -version        displays software version
+	optional arguments:
+	  -h, --help            show this help message and exit
+	  -t filters            filter by source of your string. can be: win, web, db,
+	                        unix or other
+	  -a, -analyze          show more details whenever possible (expands shadow
+	                        files fields,...)
+	  -v, -verbose          verbose mode shows progress status (useful for large
+	                        files) and time taken
+	  -m MIN_CERTAINTY, -minimum-certainty MIN_CERTAINTY
+	                        specify the minimum acceptable certainty level for
+	                        displayed results (0 - 100)
+	  -p PREPROCESSOR, --preprocessor PREPROCESSOR
+	                        <struct format string> interpret bytes as packed
+	                        binary data. Unpacks contents from different data and
+	                        endianess types according to format strings patterns
+	                        as specified on:
+	                        https://docs.python.org/3/library/struct.html
+	  -g GENERATOR, -generator GENERATOR
+	                        find encoding/decoding algorithm that exposes
+	                        interesting artifacts (choose: 'encode', 'decode',
+	                        'both')
+	  -v1 VALIDATOR1, -validator1 VALIDATOR1
+	                        applies validator 1
+	  -v2 VALIDATOR2, -validator2 VALIDATOR2
+	                        applies validator 2
+	  -v3 VALIDATOR3, -validator3 VALIDATOR3
+	                        applies validator 3
+	  -r, -recursive        sets recursive mode upon specified directory (current
+	                        workdir by default). Consider using it with
+	                        min_certainty option
+	  -f FILENAME, -file FILENAME
+	                        load a specified file
+	  -d DIRECTORY, -directory DIRECTORY
+	                        load a specified directory
+	  -fp FILE_PATTERN, -file-pattern FILE_PATTERN
+	                        specified which file pattern to be used with directory
+	                        (default: '*')
+	  -l, -list             lists supported algorithms
+	  -s, -stdin            read data from standard input
+	  -ver, -version        displays software version
+	  --config CONFIG_FILE  configuration file path
 
-    use filters for more accurate results. Report bugs, ideas, feedback to:
-    blackthorne@ironik.org
-        
-As a Volatility v2.0 plugin:
+	crack mode:
+	  auto-decode encodings and classical ciphers (base64, hex, Caesar,
+	  Vigenere, Bacon, XOR, rail fence, ...) and chains of them
+
+	  -c, -crack, --crack   try to decode/decrypt the input (string, -f file or -s
+	                        stdin) instead of identifying it
+	  -cd CRACK_DEPTH, -crack-depth CRACK_DEPTH
+	                        maximum number of chained layers to try (default: 2; 3
+	                        is much slower)
+	  -ct CRACK_TOP, -crack-top CRACK_TOP
+	                        number of candidates to show (default: 5)
+	  -cm CRACK_MIN_SCORE, -crack-min-score CRACK_MIN_SCORE
+	                        minimum plausibility score 0-100 (default: 25)
+	  -cr CRACK_REGEX, -crack-regex CRACK_REGEX
+	                        regex that the answer should match, e.g. "HTB\{.*\}"
+	                        (boosts matching candidates)
+	  -cc CRACK_CORES, -crack-cores CRACK_CORES
+	                        worker processes to use (default: all cores but one; 1
+	                        = no multiprocessing)
+
+	use filters for more accurate results. Report bugs, ideas, feedback to:
+	blackthorne@ironik.org
+
+Volatility plugin
+-----------------
 
 	$ python vol.py codetective -h
 	Volatile Systems Volatility Framework 2.0
 	Usage: Volatility - A memory forensics analysis platform.
-	
+
 	Options:
-	  -h, --help            list all available options and their default values.
-	                        Default values may be set in the configuration file
-	                        (/etc/volatilityrc)
-	  --conf-file=/your/home/.volatilityrc
-	                        User based configuration file
-	  -d, --debug           Debug volatility
-	  --info                Print information about all registered objects
-	  --plugins=PLUGINS     Additional plugin directories to use (colon separated)
-	  --cache-directory=/Users/blackthorne/.cache/volatility
-	                        Directory where cache files are stored
-	  --no-cache            Disable caching
-	  --tz=TZ               Sets the timezone for displaying timestamps
-	  -f FILENAME, --filename=FILENAME
-	                        Filename to use when opening an image
-	  --output=text         Output in this format (format support is module
-	                        specific)
-	  --output-file=OUTPUT_FILE
-	                        write output in this file
-	  -v, --verbose         Verbose information
-	  -k KPCR, --kpcr=KPCR  Specify a specific KPCR address
-	  -g KDBG, --kdbg=KDBG  Specify a specific KDBG virtual address
-	  --dtb=DTB             DTB Address
-	  --cache-dtb           Cache virtual to physical mappings
-	  --use-old-as          Use the legacy address spaces
-	  -w, --write           Enable write support
-	  --profile=WinXPSP2x86
-	                        Name of the profile to load
-	  -l LOCATION, --location=LOCATION
-	                        A URN location from which to load an address space
+	  ...
 	  -n PNAME, --pname=PNAME
 	                        define target Process name
 	  -p PID, --pid=PID     define target Process ID
@@ -325,46 +263,84 @@ As a Volatility v2.0 plugin:
 	                        apply filters, can be: win, web, unix, db and other
 	                        (default: none)
 	  -u, --uuids           include UUIDS in search (default: No)
-	
+
 	---------------------------------
 	Module Codetective
 	---------------------------------
 	determine the crypto/encoding algorithm used according to traces from its representation
 
+Most relevant options are `-u` (show UUIDs, disabled by default), `-v` (verbose mode), `-t` (filters), `-p` (process ID) and `-n` (process name). If neither `-p` nor `-n` is given, all processes are searched.
 
+	$ python vol.py codetective -n notepad -v -f JOHN-2CF071298B-20120318-024807.raw
+	Volatile Systems Volatility Framework 2.0
 
+	Found 29 tasks
+	kernel mapping...
+	Calculating task mappings...
+	Process: notepad.exe	PPID: 1696	Pid: 1896
+	...
 
-Requirements
-------------
+	=> at offset Virtual: 0x8012e000  	Physical: 0x12e000    	 Size: 0x1000
+	 Found md5 (likely) 	MD5 hash: 0A5AE0AB474FF954BA5FB5CC22691599
+	 Found md4 (possible) 	MD4 hash: 0A5AE0AB474FF954BA5FB5CC22691599
 
-Python 3.8+
-
+	=> at offset Virtual: 0x8013d000  	Physical: 0x13d000    	 Size: 0x1000
+	 Found md5 (likely) 	MD5 hash: 4BE2C18D9154D0240B36AEF861085FEC
+	 Found md4 (possible) 	MD4 hash: 4BE2C18D9154D0240B36AEF861085FEC
+	...
 
 Testing
 -------
 
 Run the unittest suite from the project root (tests are under `tests/`):
 
-    $ python3 tests/run_tests.py -v
+	$ python3 tests/run_tests.py -v
 
 Alternatively, using unittest discovery directly:
 
-    $ python3 -m unittest discover -s tests -p 'test_*.py' -v
+	$ python3 -m unittest discover -s tests -p 'test_*.py' -v
 
 Notes:
 - The test runner ensures the project root is on `PYTHONPATH`.
 - Test data and integration samples live in `tests/test.txt`.
 
+Changelog
+---------
+
+### Version 0.9.2
+* New **crack mode** (`-c`): automatically decodes encodings and classical ciphers, including chains up to 3 layers, and ranks candidates by plausibility. Works with strings, files (`-f`) and stdin (`-s`)
+* New crack options: depth (`-cd`), number of results (`-ct`), minimum score (`-cm`), expected answer regex (`-cr`) and worker processes (`-cc`)
+* New crack engine (`crypto_toolkit.py`) with 45+ transformations and 25+ encodings, multi-process search and flag detection
+* Plausibility scoring recognises flag formats, measures dictionary word coverage (including word segmentation of unspaced text), and penalises unprintable characters, random case and repetitive output
+* Bacon cipher: 24-letter alphabet, fixed A/B-flipped variant, and word boundaries preserved when spaces separate words
+* Fixed crashes and ordering issues in the solver (depth-1 crash, duplicated depth-3 results, `max_results` ignored, missing method names)
+
+### Version 0.9.1
+* Added mypy tests
+* All linting, type errors and indentation consistency issues resolved
+
+### Version 0.9.0
+* Python 3 migration: updated imports, print functions, string/bytes handling
+* Refactoring: split monolithic detection into focused functions; added `PatternMatcher`
+* Error handling: comprehensive try/except around file IO, decoding, and processing
+* Type hints & docs: pervasive typing and improved docstrings for maintainability
+* Performance: compiled regexes with UNICODE/VERBOSE, quick hash pre-checks, chunked processing, mmap for large files
+* Modern Python: `@dataclass` for `Finding`, `pathlib.Path`, f-strings, constants with annotations
+* Testing: comprehensive unittest suite in `tests/`, sample data in `tests/test.txt`, runner at `tests/run_tests.py`
+* Configuration: added support for JSON and YAML configuration files to customise default settings
+
+### Version 0.8.2
+* Added detection for JWT tokens
+* Added generic secrets detection
+
+### Version 0.8.1
+Close to a complete rewrite with new features and many bug fixes. Codetective can now report the exact location of a finding, and certainty is numeric so that multiple factors with different weights can be combined. New entropy checks improve detection of cryptographic findings, and results can be limited to a minimum certainty (`-m`). Data is processed in overlapping slices to keep memory bounded, and a verbose mode shows progress. Added directory mode (`-d`, `-r`), stdin support, the `personal` filter (phone numbers, credit cards), web cookies, URLs, the generator (`-g`), preprocessors (`-p`) and validators (`-v1..-v3`).
 
 Discussion
 ----------
 
-This script is heavily based on regular expressions done with a mindset of rejecting the maximum possible alternatives for each possible hash/code submitted but never to reject valid choices. Also, this code requires proper testing, so you're welcome to contribute with more algorithms and bring me the feedback.
-Notice that this tool also infers on the confidence level relative to each guess and it's able to give you a preliminary analyze (-a). 
+Identification is heavily based on regular expressions, written with a mindset of rejecting as many alternatives as possible for each submitted hash/code but never rejecting valid choices. Contributions of more algorithms, tests and feedback are welcome.
 
-Notice that results improve with filters (-f) that can be specified so if you know that the source of the file is related to the web, Codetective will have more confidence when trying to determine the source of code when considering web applications frameworks such as Joomla or Django. 
-If you find this tool useful, know that there is other called [Hash Identifier] (http://code.google.com/p/hash-identifier/)  that works in a different way that may also be helpful to you.
+Codetective infers a confidence level for each guess and can give you a preliminary analysis (`-a`). Results improve with filters (`-t`).
 
-When using Codetective as plugin for Volatility remember to use uuids search option (-u) if you need it, since it is disabled by default. Most relevant options are -u (show UUIDs), -v (verbose mode), -t (filters), -p (search for Process ID) and -n (search for process name). If neither -p or -n is defined, if will search in all processes.
-
-Finally, when passing strings from the command-line, always wrap your input string with '' (at least, if you're using bash) so that special characters such as '!' don't mess up with the input before it gets processed by Codetective.
+If you find this tool useful, you may also like [Hash Identifier](http://code.google.com/p/hash-identifier/), which works in a different way.

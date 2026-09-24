@@ -6,7 +6,7 @@ Codetective - a tool to identify cryptographic hashes, encodings, and other arti
 
 __description__ = 'a tool to identify cryptographic hashes, encodings, and other artifacts in a byte stream according to traces of its representation'
 __author__ = 'Francisco da G. T. Ribeiro'
-__version__ = '0.9.1'
+__version__ = '0.9.2'
 __license__ = 'GPL'
 
 # Configuration constants
@@ -1446,6 +1446,65 @@ def process_chunk(content: bytes, args, validators: List[str], min_certainty: in
 		if args.verbose:
 			print(f"Warning: Error processing chunk at position {position}: {e}")
 
+def crack_cipher(data: str, args) -> None:
+	"""
+	Try to decode/decrypt data with the crypto_toolkit auto-solver (encodings,
+	classical ciphers and chains of them) and print the best candidates.
+	"""
+	import contextlib
+	import time
+	try:
+		from crypto_toolkit import solve_challenge
+	except ImportError as e:
+		print(f"Error: crack mode requires crypto_toolkit.py next to codetective.py ({e})")
+		return
+	
+	data = data.strip()
+	if not data:
+		print("Error: nothing to crack (empty input)")
+		return
+	
+	print(f"Cracking {len(data)} characters (depth {args.crack_depth}, min score {args.crack_min_score})...")
+	if not args.verbose:
+		print("This can take a while at depth 3+. Use -v to see solver progress.")
+	
+	start = time.time()
+	solver_output = contextlib.nullcontext() if args.verbose else contextlib.redirect_stdout(io.StringIO())
+	with solver_output:
+		results = solve_challenge(
+			data,
+			max_depth=args.crack_depth,
+			max_results=args.crack_top,
+			min_score=args.crack_min_score,
+			regex_filter=args.crack_regex,
+			num_cores=args.crack_cores,
+		)
+	elapsed = time.time() - start
+	
+	print(f"\nFinished in {elapsed:.1f}s - {len(results)} candidate(s)\n")
+	if not results:
+		print("No plausible decoding found. Try a higher -crack-depth or a lower -crack-min-score.")
+		return
+	
+	for rank, result in enumerate(results, 1):
+		analysis = result.get('analysis', {})
+		decoded = result['decoded'] if isinstance(result['decoded'], str) else repr(result['decoded'])
+		print(f"{rank}. [{result['score']}/100] {result.get('method') or ' -> '.join(result.get('chain', []))}")
+		print(f"   decoded:  {decoded[:200]}{'...' if len(decoded) > 200 else ''}")
+		if analysis.get('segmented'):
+			print(f"   reads as: {analysis['segmented'][:200]}")
+		if analysis.get('flag'):
+			print(f"   flag:     {analysis['flag']}")
+		print()
+	
+	best = results[0]['score']
+	if best >= 80:
+		print("High confidence in result #1.")
+	elif best >= 60:
+		print("Result #1 looks plausible - review it.")
+	else:
+		print("Low confidence - results may need manual review.")
+
 def show_version() -> None:
 	"""Display version information."""
 	print(f'Codetective v{__version__}')
@@ -1510,6 +1569,21 @@ def main() -> None:
 		parser.add_argument('--config', dest='config_file', help='configuration file path', 
 		                   type=str)
 		
+		crack = parser.add_argument_group('crack mode', 'auto-decode encodings and classical ciphers '
+		                                  '(base64, hex, Caesar, Vigenere, Bacon, XOR, rail fence, ...) and chains of them')
+		crack.add_argument('-c', '-crack', '--crack', dest='crack', action='store_true',
+		                   help='try to decode/decrypt the input (string, -f file or -s stdin) instead of identifying it')
+		crack.add_argument('-cd', '-crack-depth', dest='crack_depth', type=int, default=2,
+		                   help='maximum number of chained layers to try (default: 2; 3 is much slower)')
+		crack.add_argument('-ct', '-crack-top', dest='crack_top', type=int, default=5,
+		                   help='number of candidates to show (default: 5)')
+		crack.add_argument('-cm', '-crack-min-score', dest='crack_min_score', type=int, default=25,
+		                   help='minimum plausibility score 0-100 (default: 25)')
+		crack.add_argument('-cr', '-crack-regex', dest='crack_regex', type=str, default=None,
+		                   help='regex that the answer should match, e.g. "HTB\\{.*\\}" (boosts matching candidates)')
+		crack.add_argument('-cc', '-crack-cores', dest='crack_cores', type=int, default=None,
+		                   help='worker processes to use (default: all cores but one; 1 = no multiprocessing)')
+		
 		args = parser.parse_args()
 		
 		# Load configuration
@@ -1530,6 +1604,21 @@ def main() -> None:
 		
 		if args.list:
 			print("shadow and SAM files, URLs, phpBB3, Wordpress, Joomla, CRC, LM, NTLM, MD4, MD5, Apr, SHA1, SHA256, base64, MySQL323, MYSQL4+, MSSQL2000, MSSQL2005, DES, RipeMD320, Whirlpool, SHA1, SHA224, SHA256, SHA384, SHA512, Blowfish, UUID, phone numbers, credit cards, web cookies")
+		
+		# Crack mode: decode the whole input rather than scanning it for artifacts
+		elif args.crack:
+			if args.string is not None:
+				crack_cipher(args.string, args)
+			elif args.filename is not None:
+				try:
+					with open(args.filename[0], 'r', encoding='utf-8', errors='replace') as f:
+						crack_cipher(f.read(), args)
+				except OSError as e:
+					print(f"Error reading file '{args.filename[0]}': {e}")
+			elif args.stdin:
+				crack_cipher(sys.stdin.read(), args)
+			else:
+				print("Error: -crack needs input: a string argument, -f <file> or -s (stdin)")
 		
 		# String mode
 		elif args.string is not None:
