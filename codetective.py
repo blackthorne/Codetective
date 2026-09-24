@@ -6,7 +6,7 @@ Codetective - a tool to identify cryptographic hashes, encodings, and other arti
 
 __description__ = 'a tool to identify cryptographic hashes, encodings, and other artifacts in a byte stream according to traces of its representation'
 __author__ = 'Francisco da G. T. Ribeiro'
-__version__ = '0.9.2'
+__version__ = '0.9.3'
 __license__ = 'GPL'
 
 # Configuration constants
@@ -29,7 +29,10 @@ import struct
 import os
 import fnmatch
 import binascii
+import json
+import time
 from collections import Counter
+from functools import lru_cache
 from datetime import datetime
 from typing import List, Dict, Optional, Tuple, Any, Union, Iterator, Callable, Iterable, cast
 from urllib.parse import urlparse
@@ -52,7 +55,13 @@ class Finding:
 	location: Union[int, Tuple[int, Tuple[int, int]], None] = None
 	certainty: int = 0
 	details: Optional[str] = None
-	created_on: datetime = field(default_factory=datetime.now)
+	# datetime.now() is ~2000x slower than time.time() and findings are created by the thousand
+	created_ts: float = field(default_factory=time.time, repr=False)
+	
+	@property
+	def created_on(self) -> datetime:
+		"""Time the finding was created."""
+		return datetime.fromtimestamp(self.created_ts)
 	
 	def __post_init__(self) -> None:
 		"""Initialize computed fields after dataclass initialization."""
@@ -87,6 +96,19 @@ class Finding:
 		"""Display formatted finding information."""
 		return f"{self.details}\t({self.type}:{self.location}:{self.confidence}[{self.certainty}]:{self.created_on})"
 
+FILTERS: Tuple[str, ...] = ('win', 'web', 'unix', 'db', 'personal', 'crypto', 'other')
+
+SUPPORTED_ALGORITHMS: Dict[str, str] = {
+	'win': 'LM, NTLM, SAM (lm:ntlm, lm:*, *:ntlm)',
+	'web': 'web cookies, URLs, JWT, Django (sha256/sha384, salted), Joomla v1/v2 MD5 (salted), WordPress/phpBB3 MD5',
+	'unix': 'shadow/crypt: DES, MD5, APR1, SHA256, SHA512, Blowfish (bcrypt)',
+	'db': 'MySQL323, MySQL4+, MSSQL2000, MSSQL2005',
+	'personal': 'phone numbers, credit cards',
+	'crypto': 'all hash, encoding and secret detections (every filter above except URLs and personal data), plus secrets in code',
+	'other': 'MD4, MD5, SHA1, SHA224, SHA256, SHA384, SHA512, RipeMD320, Whirlpool, base64, UUID, CRC, URLs, phone numbers, credit cards',
+}
+
+@lru_cache(maxsize=65536)
 def entropy(s: str) -> float:
 	"""
 	Calculate the Shannon entropy of a string.
@@ -123,8 +145,8 @@ class PatternMatcher:
 			""", compile_flags),
 			
 			# Hash patterns - optimized for common cases
-			'md5': re.compile(r"[a-fA-F\d]{32}", re.UNICODE),
-			'md4': re.compile(r"[a-fA-F\d]{32}", re.UNICODE),
+			'md5': re.compile(r"(?<![a-fA-F0-9])[a-fA-F\d]{32}(?![a-fA-F0-9])", re.UNICODE),
+			'md4': re.compile(r"(?<![a-fA-F0-9])[a-fA-F\d]{32}(?![a-fA-F0-9])", re.UNICODE),
 			'sha1': re.compile(r"\b[a-fA-F\d]{40}\b", re.UNICODE),
 			'sha224': re.compile(r"\b[a-fA-F\d]{56}\b", re.UNICODE),
 			'sha256': re.compile(r"\b[a-fA-F\d]{64}\b", re.UNICODE),
@@ -142,9 +164,9 @@ class PatternMatcher:
 			# Windows patterns
 			'lm': re.compile(r"(?<![a-fA-F0-9])[a-fA-F\d]{32}(?![a-fA-F0-9])", re.UNICODE),
 			'ntlm': re.compile(r"(?<![a-fA-F0-9])[a-fA-F\d]{32}(?![a-fA-F0-9])", re.UNICODE),
-			'SAM(*:ntlm)': re.compile(r"^(\w+:\d+:)?:([a-fA-F\d]{32})(?![a-fA-F0-9])", re.UNICODE),
-			'SAM(lm:*)': re.compile(r"^(\w+:\d+:)?[a-fA-F\d]{32}:\*", re.UNICODE),
-			'SAM(lm:ntlm)': re.compile(r"^(\w+:\d+:)?[a-fA-F\d]{32}:[a-fA-F\d]{32}\b", re.UNICODE),
+			'SAM(*:ntlm)': re.compile(r"^(\w+:\d+:)?\*:([a-fA-F\d]{32})(?![a-fA-F0-9])", re.UNICODE | re.MULTILINE),
+			'SAM(lm:*)': re.compile(r"^(\w+:\d+:)?[a-fA-F\d]{32}:\*", re.UNICODE | re.MULTILINE),
+			'SAM(lm:ntlm)': re.compile(r"^(\w+:\d+:)?[a-fA-F\d]{32}:[a-fA-F\d]{32}\b", re.UNICODE | re.MULTILINE),
 			
 			# Personal data patterns
 			'phone': re.compile(r"""
@@ -169,13 +191,13 @@ class PatternMatcher:
 			'sha512-salt-unix': re.compile(r"\$6\$[a-zA-Z0-9./]{8,16}\$[a-zA-Z0-9./]{86}(?![a-zA-Z0-9./])", re.UNICODE),
 			'apr1-salt-unix': re.compile(r"\$apr1\$[a-zA-Z0-9./]{8}\$[a-zA-Z0-9./]{22}(?![a-zA-Z0-9./])", re.UNICODE),
 			'md5-salt-unix': re.compile(r"(?<![a-zA-Z0-9.])[a-zA-Z0-9./]{8}\$[a-zA-Z0-9./]{22}(?![a-zA-Z0-9./])", re.UNICODE),
-			'blowfish-salt-unix': re.compile(r"[a-zA-Z0-9./]{2}\$[a-zA-Z0-9./]{53}(?![a-zA-Z0-9./])", re.UNICODE),
+			'blowfish-salt-unix': re.compile(r"\$2[abxy]?\$(\d{2})\$([a-zA-Z0-9./]{22})([a-zA-Z0-9./]{31})(?![a-zA-Z0-9./])", re.UNICODE),
 			
 			# Web framework patterns
-			'sha256-salt-django': re.compile(r"^(?:sha256|sha1)\$[a-zA-Z\d./]+\$[a-zA-Z0-9./]{64}$", re.UNICODE),
-			'sha256-django': re.compile(r"^(?:sha256|sha1)\$\$[a-zA-Z0-9./]{64}$", re.UNICODE),
-			'sha384-salt-django': re.compile(r"^sha384\$[a-zA-Z\d.]+\$[a-zA-Z0-9./]{96}$", re.UNICODE),
-			'sha384-django': re.compile(r"^sha384\$\$[a-zA-Z0-9./]{96}$", re.UNICODE),
+			'sha256-salt-django': re.compile(r"^(?:sha256|sha1)\$[a-zA-Z\d./]+\$[a-zA-Z0-9./]{64}$", re.UNICODE | re.MULTILINE),
+			'sha256-django': re.compile(r"^(?:sha256|sha1)\$\$[a-zA-Z0-9./]{64}$", re.UNICODE | re.MULTILINE),
+			'sha384-salt-django': re.compile(r"^sha384\$[a-zA-Z\d.]+\$[a-zA-Z0-9./]{96}$", re.UNICODE | re.MULTILINE),
+			'sha384-django': re.compile(r"^sha384\$\$[a-zA-Z0-9./]{96}$", re.UNICODE | re.MULTILINE),
 			'md5-wordpress': re.compile(r"(?<![a-zA-Z0-9.])[a-zA-Z0-9./]{31}(?![a-zA-Z0-9.=/])", re.UNICODE),
 			'md5-phpBB3': re.compile(r"(?<![a-zA-Z0-9.])[a-zA-Z0-9./]{31}(?![a-zA-Z0-9.=/])", re.UNICODE),
 			'md5-joomla2': re.compile(r"(?<![a-zA-Z0-9.])([a-zA-Z0-9./]{32})(?::[a-zA-Z0-9./]{32})?(?![a-zA-Z0-9./])", re.UNICODE),
@@ -247,43 +269,7 @@ def get_type_of(sub_text: str, filters: List[str], base_location: int = 0, analy
 	"""
 	results = []
 	
-	# Group detections by filter combinations
-	detection_groups = {
-		('web', 'crypto', 'secrets'): [
-			_detect_jwt,
-			_detect_web_cookies,
-			_detect_web_framework_hashes
-		],
-		('crypto', 'secrets'): [
-			_detect_secrets
-		],
-		('web', 'other'): [
-			_detect_urls
-		],
-		('personal', 'other'): [
-			_detect_phone_numbers,
-			_detect_credit_cards
-		],
-		('crypto', 'other'): [
-			_detect_hashes,
-			_detect_base64,
-			_detect_uuids,
-			_detect_crc
-		],
-		('db', 'crypto'): [
-			_detect_database_hashes
-		],
-		('win', 'crypto'): [
-			_detect_windows_hashes,
-			_detect_sam_hashes
-		],
-		('unix', 'crypto'): [
-			_detect_unix_hashes
-		]
-	}
-	
-	# Execute detections based on active filters
-	for filter_combination, detection_functions in detection_groups.items():
+	for filter_combination, detection_functions in DETECTION_GROUPS.items():
 		if any(f in filters for f in filter_combination):
 			for detection_func in detection_functions:
 				results.extend(detection_func(sub_text, base_location))
@@ -293,57 +279,62 @@ def get_type_of(sub_text: str, filters: List[str], base_location: int = 0, analy
 def _detect_jwt(sub_text: str, base_location: int) -> List[Finding]:
 	"""Detect JWT tokens in the text."""
 	results = []
-	printable_set = set(string.printable)
 	
 	for finding in reg_find('jwt', sub_text):
 		data, location = finding.group(), (base_location, finding.span())
-		potential_jwt_parts = finding.group().split('.')
-		
+		parts = data.split('.')
+		# A JWT header is base64url JSON, so it always starts with '{"' -> 'eyJ'
+		if len(parts) != 3 or not parts[0].startswith('eyJ'):
+			continue
 		try:
-			if (len(potential_jwt_parts) == 3 and
-				all(reg_find('base64', part) for part in potential_jwt_parts) and
-				set(base64.b64decode(potential_jwt_parts[0].encode())).issubset(printable_set) and
-				potential_jwt_parts[0].startswith('eyJ')):
-				
-				header = potential_jwt_parts[0]
-				payload = base64.b64decode(potential_jwt_parts[1].encode()).decode('utf-8', errors='ignore')
-				signature = potential_jwt_parts[2]
-				
-				jwt_find = Finding(
-					'jwt', 
-					finding.group(), 
-					location, 
-					85, 
-					f'JWT Token\theader: {header}\tpayload: {payload}\tsignature: {signature}'
-				)
-				results.append(jwt_find)
-		except (TypeError, UnicodeDecodeError, ValueError):
-			pass
+			header = json.loads(_b64url_decode(parts[0]))
+			payload = _b64url_decode(parts[1]).decode('utf-8', errors='replace')
+		except (ValueError, binascii.Error):
+			continue
+		if not isinstance(header, dict) or 'alg' not in header:
+			continue
+		
+		results.append(Finding(
+			'jwt',
+			data,
+			location,
+			85,
+			f'JWT Token\theader: {json.dumps(header)}\tpayload: {payload}\tsignature: {parts[2]}'
+		))
 	
 	return results
+
+def _b64url_decode(segment: str) -> bytes:
+	"""Decode unpadded base64url, as used by JWT segments."""
+	return base64.urlsafe_b64decode(segment + '=' * (-len(segment) % 4))
 
 def _detect_secrets(sub_text: str, base_location: int) -> List[Finding]:
 	"""Detect potential secrets in the text."""
 	results = []
+	line_start = 0
 	
-	for line in sub_text.replace("\n", "\n").splitlines():
-		for finding in reg_find('secret', line):
-			data, location = finding.group(), (base_location, finding.span())
-			for keyword in ['pass', 'key', 'security']:
-				if keyword and keyword in line.lower():
-					secret_find = Finding('secret', finding.group(), location, 45, f'Secret: {finding.group()}')
-					stripped_secret = finding.group().strip('"').strip("'").strip()
-					# Check for common false positives
-					common_false_positives = ['/', '-', 'keystore_', '{{', '$', 'secret', 'ConfigMap', '[', 'true', 'false']
-					for false_positive in common_false_positives:
-						if stripped_secret.lower().startswith(false_positive.lower()):
-							secret_find.certainty -= 25
-					# Entropy as a positive signal
-					if entropy(finding.group()) > MIN_ENTROPY:
-						secret_find.certainty += 40
-					results.append(secret_find)
+	for line in sub_text.splitlines(keepends=True):
+		lowered = line.lower()
+		if any(keyword in lowered for keyword in SECRET_KEYWORDS):
+			# The first segment is the key name ('password' in 'password = x'); values follow a separator
+			for finding in list(reg_find('secret', line))[1:]:
+				value = finding.group().strip()
+				stripped_secret = value.strip('"').strip("'").strip()
+				if not stripped_secret:
+					continue
+				start, end = finding.span()
+				secret_find = Finding('secret', value, (base_location + line_start, (start, end)), 45, f'Secret: {value}')
+				if stripped_secret.lower().startswith(SECRET_FALSE_POSITIVE_PREFIXES):
+					secret_find.certainty -= 25
+				if entropy(value) > MIN_ENTROPY:
+					secret_find.certainty += 40
+				results.append(secret_find)
+		line_start += len(line)
 	
 	return results
+
+SECRET_KEYWORDS: Tuple[str, ...] = ('pass', 'key', 'security')
+SECRET_FALSE_POSITIVE_PREFIXES: Tuple[str, ...] = ('/', '-', 'keystore_', '{{', '$', 'secret', 'configmap', '[', 'true', 'false')
 
 def _detect_web_cookies(sub_text: str, base_location: int) -> List[Finding]:
 	"""Detect web cookies in the text."""
@@ -386,7 +377,8 @@ def _detect_urls(sub_text: str, base_location: int) -> List[Finding]:
 def _detect_phone_numbers(sub_text: str, base_location: int) -> List[Finding]:
 	"""Detect phone numbers in the text."""
 	results = []
-	seen_numbers = set()  # Track seen numbers to avoid duplicates
+	# The patterns overlap; they all end on the last digit, so key occurrences by it
+	seen_ends = set()
 	
 	# More restrictive phone number patterns with word boundaries
 	phone_patterns = [
@@ -404,9 +396,8 @@ def _detect_phone_numbers(sub_text: str, base_location: int) -> List[Finding]:
 			# Validate phone number length (7-15 digits is reasonable for phone numbers)
 			# Also exclude credit card patterns (16 digits)
 			if 7 <= len(digits_only) <= 15 and len(digits_only) != 16:
-				# Avoid duplicate detections
-				if phone_number not in seen_numbers:
-					seen_numbers.add(phone_number)
+				if match.end() not in seen_ends:
+					seen_ends.add(match.end())
 					location = (base_location, match.span())
 					phone_find = Finding('phone', phone_number, location, 40, f'Phone number: {phone_number}')
 					
@@ -424,49 +415,74 @@ def _detect_credit_cards(sub_text: str, base_location: int) -> List[Finding]:
 	
 	for finding in reg_find('credit', sub_text):
 		data, location = finding.group(), (base_location, finding.span())
-		credit_find = Finding('credit', None, location, 45, None)
+		digits = re.sub(r'[ -]', '', data)
+		brand = next((name for name, pattern in CARD_BRANDS if pattern.fullmatch(digits)), None)
 		
-		# Visa
-		if re.findall(r"4[0-9]{12}(?:[0-9]{3})?", data):
-			credit_find.payload = re.findall(r"(?:4[0-9]{12})(?:[0-9]{3})?", data)[0]
-			credit_find.details = f'Credit card number: {credit_find.payload}\n\tCredit card type: Visa'
-		# Mastercard
-		elif re.findall(r"5[1-5][0-9]{14}", data):
-			credit_find.payload = re.findall(r"5[1-5][0-9]{14}", data)[0]
-			credit_find.details = f'Credit card number: {credit_find.payload}\n\tCredit card type: Mastercard'
-		# American Express
-		elif re.findall(r"3[47][0-9]{13}", data):
-			credit_find.payload = re.findall(r"3[47][0-9]{13}", data)[0]
-			credit_find.details = f'Credit card number: {credit_find.payload}\n\tCredit card type: American Express'
-		# Diners Club
-		elif re.findall(r"3(?:0[0-5]|[68][0-9])[0-9]{11}", data):
-			credit_find.payload = re.findall(r"3(?:0[0-5]|[68][0-9])[0-9]{11}", data)[0]			
-			credit_find.details = f'Credit card number: {credit_find.payload}\n\tCredit card type: Diners Club'
-		# Discover
-		elif re.findall(r"6(?:011|5[0-9]{2})[0-9]{12}", data):
-			credit_find.payload = re.findall(r"6(?:011|5[0-9]{2})[0-9]{12}", data)[0]
-			credit_find.details = f'Credit card number: {credit_find.payload}\n\tCredit card type: Discover'
-		# JCB
-		elif re.findall(r"(?:2131|1800|35\d{3})\d{11}", data):
-			credit_find.payload = re.findall(r"(?:2131|1800|35\d{3})\d{11}", data)[0]
-			credit_find.details = f'Credit card number: {credit_find.payload}\n\tCredit card type: JCB'
+		details = f'Credit card number: {data}'
+		certainty = 45
+		if brand:
+			details += f'\n\tCredit card type: {brand}'
 		else:
-			credit_find.payload = re.findall(r"\b(?:\d[ -]*?){13,16}\b", data)[0]
-			credit_find.details = f'Credit card number: {credit_find.payload}'
-			credit_find.certainty -= 30
+			certainty -= 30
+		# The Luhn checksum rejects ~90% of random digit runs
+		if luhn_valid(digits):
+			certainty += 30
+			details += '\n\tLuhn checksum: valid'
+		else:
+			certainty -= 30
 		
-		results.append(credit_find)
+		results.append(Finding('credit', data, location, certainty, details))
 	
 	return results
+
+CARD_BRANDS: List[Tuple[str, re.Pattern]] = [
+	('Visa', re.compile(r"4\d{12}(?:\d{3})?")),
+	('Mastercard', re.compile(r"(?:5[1-5]\d{2}|222[1-9]|22[3-9]\d|2[3-6]\d{2}|27[01]\d|2720)\d{12}")),
+	('American Express', re.compile(r"3[47]\d{13}")),
+	('Diners Club', re.compile(r"3(?:0[0-5]|[68]\d)\d{11}")),
+	('Discover', re.compile(r"6(?:011|5\d{2})\d{12}")),
+	('JCB', re.compile(r"(?:2131|1800|35\d{3})\d{11}")),
+]
+
+def luhn_valid(digits: str) -> bool:
+	"""Check a card number's Luhn (mod 10) checksum."""
+	if not digits.isdigit():
+		return False
+	total = 0
+	for index, char in enumerate(reversed(digits)):
+		value = int(char)
+		if index % 2:
+			value *= 2
+			if value > 9:
+				value -= 9
+		total += value
+	return total % 10 == 0
+
+# Plain hex digests: (pattern key, [(finding type, label, base certainty, bonus if high entropy)])
+HEX_DIGESTS: List[Tuple[str, List[Tuple[str, str, int, int]]]] = [
+	('sha1', [('sha1', 'SHA1', 15, 50)]),
+	('sha224', [('sha224', 'SHA224', 15, 50)]),
+	('sha256', [('sha256', 'SHA256', 15, 50)]),
+	('RipeMD320', [('RipeMD320', 'RipeMD320', 10, 0)]),
+	('sha384', [('sha384', 'SHA384', 15, 50)]),
+	('sha512', [('sha512', 'SHA512', 15, 50), ('whirlpool', 'Whirlpool', 5, 15)]),
+]
 
 def _detect_hashes(sub_text: str, base_location: int) -> List[Finding]:
 	"""Detect various hash types in the text."""
 	results = []
 	
+	for pattern_key, variants in HEX_DIGESTS:
+		for finding in reg_find(pattern_key, sub_text):
+			digest, location = finding.group(), (base_location, finding.span())
+			high_entropy = entropy(digest) > MIN_ENTROPY
+			for finding_type, label, certainty, bonus in variants:
+				results.append(Finding(finding_type, digest, location,
+				                       certainty + (bonus if high_entropy else 0), f'{label} hash: {digest}'))
+	
 	# MD5/MD4 detection
 	for finding in reg_find('md5', sub_text):
-		data, location = finding.group(), (base_location, finding.span())
-		potential_hash = re.findall(r"[a-fA-F\d]{32}", data)[0]
+		potential_hash, location = finding.group(), (base_location, finding.span())
 		
 		md5_find = Finding('md5', potential_hash, location, 40, f'MD5 hash: {potential_hash}')
 		md4_find = Finding('md4', potential_hash, location, 20, f'MD4 hash: {potential_hash}')
@@ -585,9 +601,6 @@ def _detect_windows_hashes(sub_text: str, base_location: int) -> List[Finding]:
 			
 			results.extend([lm_find, ntlm_find])
 	
-	# SAM file hash detection
-	results.extend(_detect_sam_hashes(sub_text, base_location))
-	
 	return results
 
 def _detect_sam_hashes(sub_text: str, base_location: int) -> List[Finding]:
@@ -596,10 +609,11 @@ def _detect_sam_hashes(sub_text: str, base_location: int) -> List[Finding]:
 	
 	# SAM(*:NTLM) detection
 	for finding in reg_find('SAM(*:ntlm)', sub_text):
+		location = (base_location, finding.span())
 		hash_matches = re.findall(r"\*:([a-fA-F\d]{32})\b", finding.group())
 		if hash_matches:
 			potential_hash = hash_matches[0]
-			sam_ntlm_find = Finding('SAM(*:ntlm)', potential_hash, None, 40, f'hashes in SAM file - LM: not defined\tNTLM: {potential_hash}')
+			sam_ntlm_find = Finding('SAM(*:ntlm)', potential_hash, location, 40, f'hashes in SAM file - LM: not defined\tNTLM: {potential_hash}')
 			
 			if (all(c.isupper() or c.isdigit() for c in potential_hash) and 
 				entropy(potential_hash) > MIN_ENTROPY):
@@ -724,196 +738,86 @@ def _detect_unix_hashes(sub_text: str, base_location: int) -> List[Finding]:
 			
 			results.append(des_salt_find)
 	
-	# SHA256-salt(UNIX) detection
-	for finding in reg_find('sha256-salt-unix', sub_text):
-		data, location = finding.group(), (base_location, finding.span())
-		hash_matches = re.findall(r"\$5\$([a-zA-Z0-9./]{8,16})\$([a-zA-Z0-9./]{43})", data)
-		
-		if hash_matches:
-			salt, hash_value = hash_matches[0]
-			sha256_salt_unix = Finding(
-				'sha256-salt-unix', 
-				(salt, hash_value), 
-				location, 
-				55, 
-				f'UNIX shadow file using salted SHA256 - salt: {salt}\thash: {hash_value}'
-			)
-			
-			if entropy(hash_value) > MIN_ENTROPY:
-				sha256_salt_unix.certainty += 25
-			
-			results.append(sha256_salt_unix)
+	for pattern_key, extract, certainty, bonus, label in SALTED_UNIX_HASHES:
+		results.extend(_salted_hash_findings(sub_text, base_location, pattern_key, extract,
+		                                     certainty, bonus, label))
 	
-	# SHA512-salt(UNIX) detection
-	for finding in reg_find('sha512-salt-unix', sub_text):
-		data, location = finding.group(), (base_location, finding.span())
-		hash_matches = re.findall(r"\$6\$([a-zA-Z0-9./]{8,16})\$([a-zA-Z0-9./]{86})", data)
-		
-		if hash_matches:
-			salt, hash_value = hash_matches[0]
-			sha512_salt_unix = Finding(
-				'sha512-salt-unix', 
-				(salt, hash_value), 
-				location, 
-				55, 
-				f'UNIX shadow file using salted SHA512 - salt: {salt}\thash: {hash_value}'
-			)
-			
-			if entropy(hash_value) > MIN_ENTROPY:
-				sha512_salt_unix.certainty += 25
-			
-			results.append(sha512_salt_unix)
-	
-	# APR1-salt(Apache) detection
-	for finding in reg_find('apr1-salt-unix', sub_text):
-		data, location = finding.group(), (base_location, finding.span())
-		hash_matches = re.findall(r"\$apr1\$([a-zA-Z0-9./]{8})\$([a-zA-Z0-9./]{22})", data)
-		
-		if hash_matches:
-			salt, hash_value = hash_matches[0]
-			apr1_salt_unix = Finding(
-				'apr1-salt-unix', 
-				(salt, hash_value), 
-				location, 
-				45, 
-				f'Apache htpasswd file (MD5x2000)- salt: {salt}\thash: {hash_value}'
-			)
-			
-			if entropy(hash_value) > MIN_ENTROPY:
-				apr1_salt_unix.certainty += 35
-			
-			results.append(apr1_salt_unix)
-	
-	# MD5-salt(UNIX) detection
-	for finding in reg_find('md5-salt-unix', sub_text):
-		data, location = finding.group(), (base_location, finding.span())
-		hash_matches = re.findall(r"([a-zA-Z0-9./]{8})\$([a-zA-Z0-9./]{22})", data)
-		
-		if hash_matches:
-			salt, hash_value = hash_matches[0]
-			md5_salt_unix = Finding(
-				'md5-salt-unix', 
-				(salt, hash_value), 
-				location, 
-				45, 
-				f'UNIX shadow file using salted MD5 - salt: {salt}\thash: {hash_value}'
-			)
-			
-			if entropy(hash_value) > MIN_ENTROPY:
-				md5_salt_unix.certainty += 35
-			
-			results.append(md5_salt_unix)
-	
-	# Blowfish(UNIX) detection
+	# Blowfish/bcrypt: $2a$<cost>$<22 char salt><31 char hash>
 	for finding in reg_find('blowfish-salt-unix', sub_text):
-		data, location = finding.group(), (base_location, finding.span())
-		hash_matches = re.findall(r"\$(?:2a|2)\$([a-zA-Z0-9./]{2})\$([a-zA-Z0-9./]{53})", data)
-		
-		if hash_matches:
-			salt, hash_value = hash_matches[0]
-			blowfish_salt_unix = Finding(
-				'blowfish-salt-unix', 
-				(salt, hash_value), 
-				location, 
-				55, 
-				f'UNIX shadow file using salted Blowfish - salt: {salt}\thash: {hash_value}'
-			)
-			
-			if (re.findall(r"\$(?:2a|2)\$[a-zA-Z0-9./]{2}\$([a-zA-Z0-9./]{53})\$?", data) and 
-				entropy(hash_value) > MIN_ENTROPY):
-				blowfish_salt_unix.certainty += 30
-			
-			results.append(blowfish_salt_unix)
+		cost, salt, hash_value = finding.groups()
+		blowfish_find = Finding(
+			'blowfish-salt-unix',
+			(salt, hash_value),
+			(base_location, finding.span()),
+			55,
+			f'UNIX shadow file using salted Blowfish (bcrypt, cost {cost}) - salt: {salt}\thash: {hash_value}'
+		)
+		if entropy(hash_value) > MIN_ENTROPY:
+			blowfish_find.certainty += 30
+		results.append(blowfish_find)
 	
 	return results
+
+# (pattern key, regex extracting (salt, hash), base certainty, bonus if high entropy, description)
+SALTED_UNIX_HASHES: List[Tuple[str, str, int, int, str]] = [
+	('sha256-salt-unix', r"\$5\$([a-zA-Z0-9./]{8,16})\$([a-zA-Z0-9./]{43})", 55, 25, 'UNIX shadow file using salted SHA256'),
+	('sha512-salt-unix', r"\$6\$([a-zA-Z0-9./]{8,16})\$([a-zA-Z0-9./]{86})", 55, 25, 'UNIX shadow file using salted SHA512'),
+	('apr1-salt-unix', r"\$apr1\$([a-zA-Z0-9./]{8})\$([a-zA-Z0-9./]{22})", 45, 35, 'Apache htpasswd file (MD5x2000)'),
+	('md5-salt-unix', r"([a-zA-Z0-9./]{8})\$([a-zA-Z0-9./]{22})", 45, 35, 'UNIX shadow file using salted MD5'),
+]
+
+def _salted_hash_findings(sub_text: str, base_location: int, pattern_key: str, extract: str,
+                          certainty: int, bonus: int, label: str,
+                          condition: Optional[Callable[[str], bool]] = None) -> List[Finding]:
+	"""
+	Shared logic for '<prefix><salt>$<hash>' style formats: match `pattern_key`, pull
+	(salt, hash) or just (hash,) out with `extract`, and add `bonus` certainty when the hash
+	has high entropy (and `condition(matched_text)` holds, if given).
+	"""
+	results = []
+	extract_re = _compiled(extract)
+	for finding in reg_find(pattern_key, sub_text):
+		data = finding.group()
+		match = extract_re.search(data)
+		if not match:
+			continue
+		parts = match.groups()
+		hash_value = parts[-1]
+		if len(parts) == 2:
+			payload: Any = parts
+			details = f'{label} - salt: {parts[0]}\thash: {hash_value}'
+		else:
+			payload = hash_value
+			details = f'{label} - hash: {hash_value}'
+		salted_find = Finding(pattern_key, payload, (base_location, finding.span()), certainty, details)
+		if entropy(hash_value) > MIN_ENTROPY and (condition is None or condition(data)):
+			salted_find.certainty += bonus
+		results.append(salted_find)
+	return results
+
+@lru_cache(maxsize=None)
+def _compiled(pattern: str) -> re.Pattern:
+	"""Compile (once) a helper regex used inside detectors."""
+	return re.compile(pattern)
+
+# (pattern key, regex extracting (salt, hash) or (hash,), description)
+DJANGO_HASHES: List[Tuple[str, str, str]] = [
+	('sha256-salt-django', r"^(?:sha256|sha1)\$([a-zA-Z\d.]+)\$([a-zA-Z0-9./]{64})$", 'Django shadow file using salted SHA256'),
+	('sha256-django', r"^(?:sha256|sha1)\$\$([a-zA-Z0-9./]{64})$", 'Django shadow file using SHA256'),
+	('sha384-salt-django', r"^sha384\$([a-zA-Z\d.]+)\$([a-zA-Z0-9./]{96})$", 'Django shadow file using salted SHA384'),
+	('sha384-django', r"^sha384\$\$([a-zA-Z0-9./]{96})$", 'Django shadow file using SHA384'),
+]
+
+def _is_lowercase_hash(data: str) -> bool:
+	return all(c.islower() or c.isdigit() or c == '$' for c in data)
 
 def _detect_web_framework_hashes(sub_text: str, base_location: int) -> List[Finding]:
 	"""Detect web framework-related hashes in the text."""
 	results = []
 	
-	# Django SHA256-salt detection
-	for finding in reg_find('sha256-salt-django', sub_text):
-		data, location = finding.group(), (base_location, finding.span())
-		hash_matches = re.findall(r"^(?:sha256|sha1)\$([a-zA-Z\d.]+)\$([a-zA-Z0-9./]{64})$", data)
-		
-		if hash_matches:
-			salt, hash_value = hash_matches[0]
-			sha256_salt_django = Finding(
-				'sha256-salt-django', 
-				(salt, hash_value), 
-				location, 
-				65, 
-				f'Django shadow file using salted SHA256 - salt: {salt}\thash: {hash_value}'
-			)
-			
-			if (all(c.islower() or c.isdigit() or c == '$' for c in data) and 
-				entropy(hash_value) > MIN_ENTROPY):
-				sha256_salt_django.certainty += 20
-			
-			results.append(sha256_salt_django)
-	
-	# Django SHA256 detection
-	for finding in reg_find('sha256-django', sub_text):
-		data, location = finding.group(), (base_location, finding.span())
-		hash_matches = re.findall(r"^(?:sha256|sha1)\$\$([a-zA-Z0-9./]{64})$", data)
-		
-		if hash_matches:
-			hash_value = hash_matches[0]
-			sha256_django = Finding(
-				'sha256-django', 
-				hash_value, 
-				location, 
-				65, 
-				f'Django shadow file using SHA256 - hash: {hash_value}'
-			)
-			
-			if (all(c.islower() or c.isdigit() or c == '$' for c in data) and 
-				entropy(hash_value) > MIN_ENTROPY):
-				sha256_django.certainty += 20
-			
-			results.append(sha256_django)
-	
-	# Django SHA384-salt detection
-	for finding in reg_find('sha384-salt-django', sub_text):
-		data, location = finding.group(), (base_location, finding.span())
-		hash_matches = re.findall(r"^sha384\$([a-zA-Z\d.]+)\$([a-zA-Z0-9./]{96})$", data)
-		
-		if hash_matches:
-			salt, hash_value = hash_matches[0]
-			sha384_salt_django = Finding(
-				'sha384-salt-django', 
-				(salt, hash_value), 
-				location, 
-				65, 
-				f'Django shadow file using salted SHA384 - salt: {salt}\thash: {hash_value}'
-			)
-			
-			if (all(c.islower() or c.isdigit() or c == '$' for c in data) and 
-				entropy(hash_value) > MIN_ENTROPY):
-				sha384_salt_django.certainty += 20
-			
-			results.append(sha384_salt_django)
-	
-	# Django SHA384 detection
-	for finding in reg_find('sha384-django', sub_text):
-		data, location = finding.group(), (base_location, finding.span())
-		hash_matches = re.findall(r"^sha384\$\$([a-zA-Z0-9./]{96})$", data)
-		
-		if hash_matches:
-			hash_value = hash_matches[0]
-			sha384_django = Finding(
-				'sha384-django', 
-				hash_value, 
-				location, 
-				65, 
-				f'Django shadow file using SHA384 - hash: {hash_value}'
-			)
-			
-			if (all(c.islower() or c.isdigit() or c == '$' for c in data) and 
-				entropy(hash_value) > MIN_ENTROPY):
-				sha384_django.certainty += 20
-			
-			results.append(sha384_django)
+	for pattern_key, extract, label in DJANGO_HASHES:
+		results.extend(_salted_hash_findings(sub_text, base_location, pattern_key, extract, 65, 20, label,
+		                                     condition=_is_lowercase_hash))
 	
 	# WordPress MD5 detection
 	for finding in reg_find('md5-wordpress', sub_text):
@@ -1029,6 +933,41 @@ def _detect_crc(sub_text: str, base_location: int) -> List[Finding]:
 	
 	return results
 
+# Detectors run when any filter in their key is active
+DETECTION_GROUPS: Dict[Tuple[str, ...], List[Callable[[str, int], List[Finding]]]] = {
+	('web', 'crypto', 'secrets'): [
+		_detect_jwt,
+		_detect_web_cookies,
+		_detect_web_framework_hashes
+	],
+	('crypto', 'secrets'): [
+		_detect_secrets
+	],
+	('web', 'other'): [
+		_detect_urls
+	],
+	('personal', 'other'): [
+		_detect_phone_numbers,
+		_detect_credit_cards
+	],
+	('crypto', 'other'): [
+		_detect_hashes,
+		_detect_base64,
+		_detect_uuids,
+		_detect_crc
+	],
+	('db', 'crypto'): [
+		_detect_database_hashes
+	],
+	('win', 'crypto'): [
+		_detect_windows_hashes,
+		_detect_sam_hashes
+	],
+	('unix', 'crypto'): [
+		_detect_unix_hashes
+	]
+}
+
 def generator(data: Union[str, bytes], mode: str) -> Dict[str, str]:
 	"""
 	Generate various encodings/decodings of the input data.
@@ -1058,9 +997,56 @@ def generator(data: Union[str, bytes], mode: str) -> Dict[str, str]:
 	
 	return gen_results
 
+VALIDATOR_CHECKS: Dict[str, Callable[[str], bool]] = {
+	'NUMERIC': str.isdigit,
+	'ALPHA': str.isalpha,
+	'LOWER': str.islower,
+	'UPPER': str.isupper,
+	'ALPHANUMERIC': str.isalnum,
+	'SYMBOL': lambda c: not c.isalnum(),
+}
+
+def _finding_payload(finding: Finding) -> str:
+	"""Flatten a finding's payload into the string validators operate on."""
+	if isinstance(finding.payload, tuple):
+		payload = "".join(str(item) for item in finding.payload)
+	else:
+		payload = str(finding.payload) if finding.payload else ""
+	return re.sub(f'[{BAD_CHARS}]', '', payload)
+
+def _build_validator(validator: str) -> Optional[Callable[[str], bool]]:
+	"""
+	Turn 'ALL:UPPER', 'HAS:NUMERIC' or 'SEARCH:<regex>' into a predicate over a payload.
+	Returns None (after printing why) for invalid validators.
+	"""
+	mode, sep, argument = validator.partition(':')
+	mode = mode.lower()
+	if not sep or not argument:
+		print(f"Invalid validator '{validator}': expected ALL:<function>, HAS:<function> or SEARCH:<regex>")
+		return None
+	
+	if mode == 'search':
+		try:
+			pattern = re.compile(argument)
+		except re.error as e:
+			print(f"Invalid validator '{validator}': bad regular expression ({e})")
+			return None
+		return lambda payload: bool(pattern.search(payload))
+	
+	if mode not in ('all', 'has'):
+		print(f"Invalid validator '{validator}': predicate must be ALL, HAS or SEARCH")
+		return None
+	check = VALIDATOR_CHECKS.get(argument.upper())
+	if check is None:
+		print(f"Invalid validator '{validator}': function must be one of {', '.join(VALIDATOR_CHECKS)}")
+		return None
+	quantifier = all if mode == 'all' else any
+	return lambda payload: bool(payload) and quantifier(check(c) for c in payload)
+
 def run_validators(results: List[Finding], validators: List[str]) -> List[Finding]:
 	"""
-	Run validators on the results to filter them.
+	Keep only the findings that satisfy every validator (validators are combined with AND).
+	Invalid validators are reported and ignored.
 	
 	Args:
 		results: List of findings to validate
@@ -1069,58 +1055,25 @@ def run_validators(results: List[Finding], validators: List[str]) -> List[Findin
 	Returns:
 		Filtered list of findings
 	"""
-	final_results: List[Finding] = []
-	
-	for validator in validators:		
-		validator_func: Callable[[Iterable[object]], bool] | re.Pattern[str] | None = None
-		validator_type = None
-		mode = validator.split(':')[0].lower()
-		
-		if mode == 'all':
-			validator_func = all
-		elif mode == 'has':
-			validator_func = any
-		elif mode == 'search':			
-			validator_func = re.compile(validator.split(':')[1])
-		else:
-			print('Invalid validator provided.')
-			continue
-			
-		validator_type = validator.split(':')[1].upper()
+	predicates = [p for p in (_build_validator(v) for v in validators) if p is not None]
+	if not predicates:
+		return results
+	return [finding for finding in results
+	        if all(predicate(_finding_payload(finding)) for predicate in predicates)]
 
-		for result in results:
-			payload = None
-			
-			if isinstance(result.payload, tuple):
-				payload = "".join(str(item) for item in result.payload)
-			else:
-				payload = str(result.payload) if result.payload else ""
-			
-			payload = re.sub(f'[{BAD_CHARS}]', '', payload)
-			
-			if validator_type == 'NUMERIC':
-				if callable(validator_func) and validator_func(c.isdigit() for c in payload):
-					final_results.append(result) 
-			elif validator_type == 'ALPHA':
-				if callable(validator_func) and validator_func(c.isalpha() for c in payload):
-					final_results.append(result)
-			elif validator_type == 'LOWER':
-				if callable(validator_func) and validator_func(c.islower() for c in payload):
-					final_results.append(result)	
-			elif validator_type == 'UPPER':
-				if callable(validator_func) and validator_func(c.isupper() for c in payload):
-					final_results.append(result)	
-			elif validator_type == 'ALPHANUMERIC':
-				if callable(validator_func) and validator_func(c.isalnum() for c in payload):
-					final_results.append(result)
-			elif validator_type == 'SYMBOL':
-				if callable(validator_func) and validator_func(not c.isalnum() for c in payload):
-					final_results.append(result)	
-			else:
-				if isinstance(validator_func, re.Pattern) and validator_func.search(payload):
-					final_results.append(result)
-					
-	return final_results
+def deduplicate_findings(results: List[Finding]) -> List[Finding]:
+	"""
+	Drop repeated findings (same type, location and payload), e.g. the same hash
+	reported by two detectors that share a pattern.
+	"""
+	seen = set()
+	unique = []
+	for finding in results:
+		key = (finding.type, finding.location, str(finding.payload))
+		if key not in seen:
+			seen.add(key)
+			unique.append(finding)
+	return unique
 	
 def show_results(results: List[Finding], show_details: bool, validators: List[str], min_certainty: int) -> None:
 	"""
@@ -1132,6 +1085,8 @@ def show_results(results: List[Finding], show_details: bool, validators: List[st
 		validators: List of validators to apply
 		min_certainty: Minimum certainty level to display
 	"""
+	results = deduplicate_findings(results)
+	
 	if min_certainty > 0:
 		results = [finding for finding in results if (finding.certainty or 0) >= min_certainty] 
 	
@@ -1241,18 +1196,24 @@ def test_encoding(data: str, filters: List[str], analyze: bool, validators: List
 		mode: Mode ('encode', 'decode', or 'both')
 		min_certainty: Minimum certainty level to display
 	"""
-	print(repr(generator(data, mode).items()))
-	
-	for element in generator(data, mode).items():
-		results = get_type_of(element[1], filters)
+	transforms = generator(data, mode)
+	unchanged = 0
+	with_findings = 0
+	for codec_name, transformed in sorted(transforms.items()):
+		if transformed == data:
+			unchanged += 1
+			continue
+		results = get_type_of(transformed, filters)
+		if not results:
+			continue
 		
-		if validators:
-			results = run_validators(results, validators)
-		
-		if verbose:
-			print(f'after {element[0]}:')
-		
+		with_findings += 1
+		print(f'after {codec_name}:')
 		show_results(results, analyze, validators, min_certainty)
+	
+	if verbose or not with_findings:
+		print(f'{len(transforms)} codecs tried: {unchanged} left the data unchanged, '
+		      f'{with_findings} exposed findings')
 
 def enumerate_files(root_path: str, pattern: str, recursive: bool = True) -> List[str]:
 	"""
@@ -1282,7 +1243,7 @@ def enumerate_files(root_path: str, pattern: str, recursive: bool = True) -> Lis
 
 def process_file(filename: str, args, validators: List[str], min_certainty: int) -> None:
 	"""
-	Process a single file for analysis with optimized memory usage.
+	Scan a file (or a pipe such as /dev/stdin) window by window so memory stays bounded.
 	
 	Args:
 		filename: Path to the file to process
@@ -1290,158 +1251,178 @@ def process_file(filename: str, args, validators: List[str], min_certainty: int)
 		validators: List of validators to apply
 		min_certainty: Minimum certainty level to display
 	"""
+	window_size = getattr(args, 'window_size', MAX_FILE_WINDOW_SIZE)
+	overlap_size = min(getattr(args, 'overlap_size', MAX_OVERLAP_WINDOW_SIZE), window_size // 2)
 	try:
-		file_size = Path(filename).stat().st_size
-		
-		# Optimize window size based on file size
-		if file_size <= MAX_OVERLAP_WINDOW_SIZE:
-			file_window_size = file_size
-			overlap_window_size = 0
-		else:
-			file_window_size = min(MAX_FILE_WINDOW_SIZE, file_size)
-			overlap_window_size = MAX_OVERLAP_WINDOW_SIZE
-		
-		# Use memory mapping for large files to reduce memory usage
-		if file_size > 100 * 1024 * 1024:  # 100MB
-			process_large_file_mmap(filename, args, validators, min_certainty, file_window_size, overlap_window_size)
-		else:
-			process_file_streaming(filename, args, validators, min_certainty, file_window_size, overlap_window_size)
-					
+		path = Path(filename)
+		# Pipes and devices report st_size 0 but still have data
+		file_size = path.stat().st_size if path.is_file() else 0
+		if path.is_file() and file_size == 0:
+			return
+		with open(filename, 'rb') as stream:
+			_scan_windows(stream, file_size, window_size, overlap_size, filename, args, validators, min_certainty)
 	except FileNotFoundError:
 		print(f"Error: File '{filename}' not found.")
 	except PermissionError:
 		print(f"Error: Permission denied accessing file '{filename}'.")
 	except OSError as e:
 		print(f"Error: OS error accessing file '{filename}': {e}")
-	except Exception as e:
-		print(f"Error: Unexpected error processing file '{filename}': {e}")
 
-def process_file_streaming(filename: str, args, validators: List[str], min_certainty: int, 
-					  file_window_size: int, overlap_window_size: int) -> None:
-	"""Process file using streaming approach for medium-sized files."""
-	with open(filename, 'rb') as fl:
-		file_size = Path(filename).stat().st_size
-		
-		if args.verbose:
-			print(f'progress: 0%\tlocation: [0/{file_size}]')
-		
-		position = 0
-		while position < file_size:
-			try:
-				fl.seek(position)
-				content = fl.read(file_window_size)
-				current_position = fl.tell()
-				
-				if not content:
-					break
-				
-				# Process the chunk
-				process_chunk(content, args, validators, min_certainty, position)
-				
-				# Move to next position with overlap
-				if current_position < file_size:
-					position = current_position - overlap_window_size
-					if position < 0:
-						position = 0
-				else:
-					break
-				
-				if args.verbose:
-					progress = (current_position * 100) // file_size
-					print(f'progress: {progress}%\tlocation: [{current_position}/{file_size}]')
-					
-			except (UnicodeDecodeError, ValueError) as e:
-				if args.verbose:
-					print(f"Warning: Failed to decode content at position {position}: {e}")
-				position += file_window_size // 2  # Skip problematic area
-				continue
-			except Exception as e:
-				if args.verbose:
-					print(f"Warning: Unexpected error processing file {filename} at position {position}: {e}")
-				position += file_window_size // 2
-				continue
-
-def process_large_file_mmap(filename: str, args, validators: List[str], min_certainty: int,
-					 file_window_size: int, overlap_window_size: int) -> None:
-	"""Process large files using memory mapping for better memory efficiency."""
-	import mmap
-	
-	with open(filename, 'rb') as fl:
-		with mmap.mmap(fl.fileno(), 0, access=mmap.ACCESS_READ) as mmapped_file:
-			file_size = len(mmapped_file)
-			
-			if args.verbose:
-				print(f'Using memory mapping for large file: {file_size} bytes')
-			
-			position = 0
-			while position < file_size:
-				try:
-					# Extract chunk from memory-mapped file
-					chunk_end = min(position + file_window_size, file_size)
-					content = mmapped_file[position:chunk_end]
-					
-					if not content:
-						break
-					
-					# Process the chunk
-					process_chunk(content, args, validators, min_certainty, position)
-					
-					# Move to next position with overlap
-					if chunk_end < file_size:
-						position = chunk_end - overlap_window_size
-						if position < 0:
-							position = 0
-					else:
-						break
-					
-					if args.verbose:
-						progress = (chunk_end * 100) // file_size
-						print(f'progress: {progress}%\tlocation: [{chunk_end}/{file_size}]')
-						
-				except (UnicodeDecodeError, ValueError) as e:
-					if args.verbose:
-						print(f"Warning: Failed to decode content at position {position}: {e}")
-					position += file_window_size // 2
-					continue
-				except Exception as e:
-					if args.verbose:
-						print(f"Warning: Unexpected error processing file {filename} at position {position}: {e}")
-					position += file_window_size // 2
-					continue
-
-def process_chunk(content: bytes, args, validators: List[str], min_certainty: int, position: int) -> None:
-	"""Process a single chunk of data."""
+def _record_size(preprocessor: str) -> int:
+	"""Size of one packed record for a -p struct format (1 for the text formats hex/base64)."""
+	if preprocessor in ('hex', 'base64'):
+		return 1
 	try:
-		if args.preprocessor and len(args.preprocessor) == 1:
-			try:
-				processed = pre_process(content, args.preprocessor[0])
-				content = processed.encode('utf-8', errors='ignore')
-			except (struct.error, ValueError) as e:
-				if args.verbose:
-					print(f"Warning: Failed to preprocess data: {e}")
-				return
-		
-		# Decode content with error handling
+		return max(1, struct.calcsize(preprocessor))
+	except struct.error:
+		return 1
+
+def _utf8_start(content: bytes, cut: int) -> int:
+	"""Move `cut` back (at most 3 bytes) so it doesn't land inside a UTF-8 sequence."""
+	for _ in range(3):
+		if 0 < cut < len(content) and 0x80 <= content[cut] < 0xC0:
+			cut -= 1
+	return cut
+
+def _window_boundary(content: bytes, overlap_size: int, record_size: int = 1) -> int:
+	"""
+	Offset (relative to the window) where this window's findings end and the next window's
+	begin. It lies between `overlap_size` and `overlap_size // 2` bytes before the end, so
+	anything starting before it has at least `overlap_size // 2` bytes to finish in this
+	window: after the last newline, else after the last space/tab, else a cut that doesn't
+	split a UTF-8 sequence. Packed records (-p) are never split.
+	"""
+	end = len(content)
+	if record_size > 1:
+		return end - end % record_size
+	low, high = end - overlap_size, end - overlap_size // 2
+	if low >= high:
+		return _utf8_start(content, end)
+	cut = content.rfind(b'\n', low, high)
+	if cut == -1:
+		cut = max(content.rfind(b' ', low, high), content.rfind(b'\t', low, high))
+	return cut + 1 if cut != -1 else _utf8_start(content, high)
+
+def _window_start(content: bytes, boundary: int, lead_size: int) -> int:
+	"""
+	Where the next window starts: the beginning of the line holding `boundary` (looking
+	back at most `lead_size` bytes), so the text right after the boundary is analysed with
+	the same leading context in both windows.
+	"""
+	low = max(0, boundary - lead_size)
+	newline = content.rfind(b'\n', low, boundary)
+	return newline + 1 if newline != -1 else _utf8_start(content, low)
+
+def _scan_windows(stream: io.BufferedIOBase, file_size: int, window_size: int, overlap_size: int,
+                  filename: str, args, validators: List[str], min_certainty: int) -> None:
+	"""
+	Read the stream sequentially in windows of `window_size` bytes. Consecutive windows
+	share a boundary (preferably a line break) and overlap by up to `overlap_size` bytes
+	around it: the earlier window keeps reading past the boundary and the later one starts
+	at the beginning of the boundary's line.
+	
+	Each window reports only the findings that *start* in its own stretch, between the
+	previous boundary and its own. Anything shorter than `overlap_size // 2` is therefore
+	reported exactly once, whole, and with the same context as in a single pass: no partial
+	matches (e.g. the first 40 hex digits of a SHA256 posing as a SHA1), no repeats, and no
+	need to remember past findings. The -p/-g transforms don't preserve offsets, so for them
+	the windows don't overlap and are only cut at boundaries.
+	"""
+	record_size = _record_size(args.preprocessor[0]) if args.preprocessor else 1
+	disjoint = bool(args.preprocessor or args.generator)
+	position = 0  # file offset of content[0]
+	lead = 0      # bytes at the start of content that belong to the previous window
+	carry = b''
+	while True:
+		wanted = window_size - len(carry)
 		try:
-			text_content = content.decode('utf-8', errors='ignore')
-		except UnicodeDecodeError:
-			# Try with different encodings
-			for encoding in ['latin-1', 'cp1252', 'iso-8859-1']:
-				try:
-					text_content = content.decode(encoding, errors='ignore')
-					break
-				except UnicodeDecodeError:
-					continue
-			else:
-				text_content = content.decode('utf-8', errors='replace')
+			fresh = stream.read(wanted)
+		except (OSError, ValueError) as e:
+			print(f"Warning: error reading {filename} at position {position + len(carry)}: {e}")
+			fresh = b''
+		content = carry + fresh
+		if not content:
+			break
+		last = len(fresh) < wanted  # buffered reads only come back short at EOF
+		boundary = len(content) if last else _window_boundary(content, overlap_size, record_size)
 		
-		if args.generator:
-			test_encoding(text_content, args.filters, args.analyze, validators, 
-			             args.verbose, args.generator[0], min_certainty)
+		if disjoint:
+			process_chunk(content[:boundary], args, validators, min_certainty, position)
+			next_start = boundary
 		else:
-			results = get_type_of(text_content, args.filters)
-			show_results(results, args.analyze, validators, min_certainty)
-			
+			process_chunk(content, args, validators, min_certainty, position,
+			              report_limit=None if last else boundary, report_from=lead)
+			next_start = boundary if last else _window_start(content, boundary, overlap_size // 2)
+		
+		lead = boundary - next_start
+		position += next_start
+		carry = content[next_start:]
+		if args.verbose:
+			done = position + lead
+			total = max(file_size, done)
+			progress = f'{done * 100 // total}%' if file_size else f'{done} bytes'
+			print(f'progress: {progress}\tlocation: [{done}/{file_size or "?"}]')
+		if last:
+			break
+
+# Each undecodable byte becomes one U+FFFD, so character offsets still map 1:1 onto it
+_UNDECODABLE_BYTES = {code: '\ufffd' for code in range(0xDC80, 0xDD00)}
+
+def _decode_window(content: bytes) -> Tuple[str, Optional[str]]:
+	"""
+	Decode file bytes as UTF-8. Returns the text to analyse and, when it isn't plain
+	ASCII, the surrogate-escaped decoding used to turn character offsets into byte offsets.
+	"""
+	if content.isascii():
+		return content.decode('ascii'), None
+	raw = content.decode('utf-8', errors='surrogateescape')
+	return raw.translate(_UNDECODABLE_BYTES), raw
+
+def _to_byte_offsets(results: List[Finding], raw: str) -> None:
+	"""Convert finding locations from character offsets in `raw` to byte offsets."""
+	char_pos = byte_pos = 0
+	for finding in sorted(results, key=lambda f: cast(int, f.location)):
+		offset = cast(int, finding.location)
+		byte_pos += len(raw[char_pos:offset].encode('utf-8', errors='surrogateescape'))
+		char_pos = offset
+		finding.location = byte_pos
+
+def analyze_data(data: Union[str, bytes], args, validators: List[str], min_certainty: int,
+                 position: int = 0, report_limit: Optional[int] = None, report_from: int = 0) -> None:
+	"""
+	Identify artifacts in one piece of input (a string, a stdin line or a file chunk):
+	apply the -p preprocessor, then either the -g generator or plain identification.
+	`position` is the byte offset of `data` in the file, so file locations are absolute
+	byte offsets. Only findings starting in data[report_from:report_limit] are shown; the
+	rest belong to the neighbouring, overlapping, windows.
+	"""
+	raw: Optional[str] = None
+	if args.preprocessor:
+		text = pre_process(data if isinstance(data, bytes) else data.encode(), args.preprocessor[0])
+	elif isinstance(data, bytes):
+		text, raw = _decode_window(data)
+	else:
+		text = data
+	
+	if args.generator:
+		test_encoding(text, args.filters, args.analyze, validators, args.verbose, args.generator[0], min_certainty)
+		return
+	
+	results = get_type_of(text, args.filters)
+	if raw is not None:
+		_to_byte_offsets(results, raw)
+	if report_from or report_limit is not None:
+		limit = len(data) if report_limit is None else report_limit
+		results = [finding for finding in results if report_from <= cast(int, finding.location) < limit]
+	for finding in results:
+		finding.location = cast(int, finding.location) + position
+	show_results(results, args.analyze, validators, min_certainty)
+
+def process_chunk(content: bytes, args, validators: List[str], min_certainty: int, position: int,
+                  report_limit: Optional[int] = None, report_from: int = 0) -> None:
+	"""Analyse one file chunk; errors are reported (with -v) instead of aborting the scan."""
+	try:
+		analyze_data(content, args, validators, min_certainty, position, report_limit, report_from)
 	except Exception as e:
 		if args.verbose:
 			print(f"Warning: Error processing chunk at position {position}: {e}")
@@ -1530,9 +1511,8 @@ def main() -> None:
 		parser.add_argument('string', type=str, nargs='?',
 	                    help='determine algorithm used for <string> according to its data representation')
 		parser.add_argument('-t', metavar='filters', 
-		                   default=['win', 'web', 'unix', 'db', 'personal', 'crypto', 'other'], 
-		                   type=str, nargs=1, dest='filters',
-		                   help='filter by source of your string. can be: win, web, db, unix or other')
+		                   default=list(FILTERS), type=str, nargs=1, dest='filters',
+		                   help=f'filter by source of your string: one or more (comma separated) of {", ".join(FILTERS)}. e.g. -t win,db')
 		parser.add_argument('-a', '-analyze', dest='analyze', 
 		                   help='show more details whenever possible (expands shadow files fields,...)', 
 		                   required=False, action='store_true')
@@ -1546,6 +1526,7 @@ def main() -> None:
 		                   help='<struct format string> interpret bytes as packed binary data. Unpacks contents from different data and endianess types according to format strings patterns as specified on: https://docs.python.org/3/library/struct.html', 
 		                   required=False, nargs=1)
 		parser.add_argument('-g', '-generator', dest='generator', type=str, nargs=1, 
+		                   choices=['encode', 'decode', 'both'],
 		                   help='find encoding/decoding algorithm that exposes interesting artifacts (choose: \'encode\', \'decode\', \'both\')')
 		parser.add_argument('-v1', '-validator1', dest='validator1', nargs=1, required=False, type=str, 
 		                   help='applies validator 1')
@@ -1586,11 +1567,23 @@ def main() -> None:
 		
 		args = parser.parse_args()
 		
+		# -t accepts 'win,db' as well as 'win'
+		if args.filters is not None and len(args.filters) == 1 and args.filters != list(FILTERS):
+			args.filters = [f.strip().lower() for f in args.filters[0].split(',') if f.strip()]
+			unknown = [f for f in args.filters if f not in FILTERS]
+			if unknown:
+				parser.error(f"unknown filter(s): {', '.join(unknown)} (choose from {', '.join(FILTERS)})")
+		
 		# Load configuration
 		config = load_configuration(args.config_file)
+		args.window_size = max(1024, config.detection.max_file_window_size)
+		args.overlap_size = max(0, config.detection.max_overlap_window_size)
 		
-		# Set defaults from configuration
-		min_certainty = config.min_certainty if hasattr(config, 'min_certainty') else (0 if not args.min_certainty else args.min_certainty[0])
+		# Command-line -m wins over the configuration file
+		if args.min_certainty:
+			min_certainty = args.min_certainty[0]
+		else:
+			min_certainty = config.detection.min_certainty
 		validators = [args.__dict__[val][0] for val in ['validator1', 'validator2', 'validator3'] 
 		             if args.__dict__[val] is not None]
 		file_pattern = '*' if not args.file_pattern else args.file_pattern[0]
@@ -1603,7 +1596,12 @@ def main() -> None:
 			return
 		
 		if args.list:
-			print("shadow and SAM files, URLs, phpBB3, Wordpress, Joomla, CRC, LM, NTLM, MD4, MD5, Apr, SHA1, SHA256, base64, MySQL323, MYSQL4+, MSSQL2000, MSSQL2005, DES, RipeMD320, Whirlpool, SHA1, SHA224, SHA256, SHA384, SHA512, Blowfish, UUID, phone numbers, credit cards, web cookies")
+			print("Identification (by filter):")
+			for filter_name, algorithms in SUPPORTED_ALGORITHMS.items():
+				print(f"  {filter_name:<9} {algorithms}")
+			print("Crack mode (-c): base64/32/85, hex, binary, Morse, URL and 25+ other encodings; Caesar/ROT,")
+			print("  Vigenere, Beaufort, autokey, Gronsfeld, Porta, affine, Atbash, Bacon, rail fence,")
+			print("  columnar/scytale transposition, single-byte XOR and chains of them")
 		
 		# Crack mode: decode the whole input rather than scanning it for artifacts
 		elif args.crack:
@@ -1623,14 +1621,7 @@ def main() -> None:
 		# String mode
 		elif args.string is not None:
 			try:
-				data = args.string
-				if args.preprocessor and len(args.preprocessor) == 1:
-					data = pre_process(data.encode(), args.preprocessor[0])
-				if args.generator:
-					test_encoding(data, args.filters, args.analyze, validators, args.verbose, args.generator[0], min_certainty)
-				else:
-					results = get_type_of(data, args.filters)
-					show_results(results, args.analyze, validators, min_certainty)
+				analyze_data(args.string, args, validators, min_certainty)
 			except Exception as e:
 				print(f"Error processing string: {e}")
 		
@@ -1653,15 +1644,10 @@ def main() -> None:
 		
 		# Stdin mode
 		elif args.stdin:
+			line_num = 0
 			try:
 				for line_num, data in enumerate(sys.stdin, 1):
-					if args.preprocessor and len(args.preprocessor) == 1:
-						data = pre_process(data.encode(), args.preprocessor[0])
-					if args.generator:
-						test_encoding(data, args.filters, args.analyze, validators, args.verbose, args.generator[0], min_certainty)
-					else:
-						results = get_type_of(data, args.filters)
-						show_results(results, args.analyze, validators, min_certainty)
+					analyze_data(data, args, validators, min_certainty)
 			except KeyboardInterrupt:
 				print("\nInterrupted by user.")
 			except Exception as e:
@@ -1677,7 +1663,7 @@ def main() -> None:
 		print("\nInterrupted by user.")
 	except Exception as e:
 		print(f"Unexpected error: {e}")
-		if args.verbose:
+		if '-v' in sys.argv or '-verbose' in sys.argv:
 			import traceback
 			traceback.print_exc()
 

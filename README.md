@@ -12,7 +12,7 @@ Features
 --------
 * **Identify** hashes, encodings and secrets: Windows (LM, NTLM, SAM), Unix shadow formats, web frameworks (Django, Joomla, phpBB3, WordPress), databases (MySQL, MSSQL), SHA/MD families, CRC, UUIDs, JWTs, base64, URLs, web cookies, phone numbers, credit cards and secrets in code. Each finding comes with a certainty score (0-100).
 * **Crack** encoded or enciphered text (`-c`): base64/32/85, hex, binary, Morse, URL encoding and 25+ other encodings; Caesar/ROT variants, Vigenère, Beaufort, autokey, Gronsfeld, Porta, affine, Atbash, Bacon (24 and 26 letter), rail fence, columnar/scytale transposition, XOR (all single-byte keys) and more, up to 3 layers deep, using all CPU cores.
-* **Scan** files, whole directories (recursively) or standard input. Large files are processed in overlapping chunks (with mmap) so memory stays bounded.
+* **Scan** files, whole directories (recursively) or standard input. Large files are processed in overlapping windows so memory stays bounded.
 * **Filter** results by source (`-t`), minimum certainty (`-m`) or custom validators (`-v1..-v3`).
 * **Preprocess** binary structures with `struct` format strings (`-p`) and try every codec available in Python (`-g`).
 * **Configure** defaults through JSON/YAML configuration files (`--config`, see `config/CONFIGURATION.md`).
@@ -100,7 +100,7 @@ if __name__ == '__main__':  # required for multiprocessing
 
 Identification mode
 -------------------
-Supported filters (`-t`) are: `win`, `web`, `unix`, `db`, `personal`, `crypto` and `other`. Results improve with filters: if you know the data comes from a web application, Codetective will be more confident about framework formats such as Joomla or Django.
+Supported filters (`-t`) are: `win`, `web`, `unix`, `db`, `personal`, `crypto` and `other`; combine them with commas, e.g. `-t win,db`. Run `-l` to see what each filter covers. Results improve with filters: if you know the data comes from a web application, Codetective will be more confident about framework formats such as Joomla or Django.
 
 Supported algorithms and artefacts:
 
@@ -115,7 +115,7 @@ Supported algorithms and artefacts:
 * phone numbers, credit cards
 
 ### Validators
-Validators filter the output. You may use up to 3 per run with `-v1`, `-v2` and `-v3`. Each validator combines a predicate, `ALL` or `HAS`, with a matching function such as `UPPER` for findings in upper case. Supported functions:
+Validators filter the output. You may use up to 3 per run with `-v1`, `-v2` and `-v3`; a finding is shown only if it passes all of them. Each validator combines a predicate, `ALL` or `HAS`, with a matching function such as `UPPER` for findings in upper case. Supported functions:
 
 * NUMERIC
 * ALPHA
@@ -124,13 +124,15 @@ Validators filter the output. You may use up to 3 per run with `-v1`, `-v2` and 
 * ALPHANUMERIC
 * SYMBOL
 
-For a custom validator, use the predicate `SEARCH` followed by a regular expression.
+For a custom validator, use the predicate `SEARCH` followed by a regular expression (it may itself contain `:`).
+
+	$ python3 codetective.py -t win -v1 'HAS:UPPER' -v2 'SEARCH:^[0-9A-F]+$' -f sam_dump.txt
 
 ### Generator and preprocessors
 With the generator option Codetective loads every codec supported by your Python environment (the `aliases` module) and applies them to find something meaningful: multiple encodings (`-g encode`), decodings (`-g decode`) or both (`-g both`). Preprocessors (`-p`) convert binary structures into strings first, using C struct format strings.
 
 ### Large files and directories
-Data is broken into slices and analysed in turn so that large files don't fill memory. An overlapping window makes sure no findings are lost at slice boundaries; as a side effect you may see duplicate results. Directory mode (`-d rootPath`) looks at folders rather than files and supports recursion (`-r`). On large amounts of data, filter by minimum certainty, e.g. `-m 70`.
+Data is read sequentially in windows (1 MB by default, `max_file_window_size` in the configuration) so that large files and pipes don't fill memory. Consecutive windows overlap (5 KB, `max_overlap_window_size`) and meet at a line boundary, and each finding is reported only by the window it starts in, so artifacts crossing a boundary are neither lost, cut in two nor repeated. Locations are byte offsets from the start of the file. Directory mode (`-d rootPath`) looks at folders rather than files and supports recursion (`-r`). On large amounts of data, filter by minimum certainty, e.g. `-m 70`.
 
 Examples
 --------
@@ -167,12 +169,12 @@ Usage
 -----
 
 	usage: codetective.py [-h] [-t filters] [-a] [-v] [-m MIN_CERTAINTY]
-	                      [-p PREPROCESSOR] [-g GENERATOR] [-v1 VALIDATOR1]
-	                      [-v2 VALIDATOR2] [-v3 VALIDATOR3] [-r] [-f FILENAME]
-	                      [-d DIRECTORY] [-fp FILE_PATTERN] [-l] [-s] [-ver]
-	                      [--config CONFIG_FILE] [-c] [-cd CRACK_DEPTH]
-	                      [-ct CRACK_TOP] [-cm CRACK_MIN_SCORE] [-cr CRACK_REGEX]
-	                      [-cc CRACK_CORES]
+	                      [-p PREPROCESSOR] [-g {encode,decode,both}]
+	                      [-v1 VALIDATOR1] [-v2 VALIDATOR2] [-v3 VALIDATOR3] [-r]
+	                      [-f FILENAME] [-d DIRECTORY] [-fp FILE_PATTERN] [-l]
+	                      [-s] [-ver] [--config CONFIG_FILE] [-c]
+	                      [-cd CRACK_DEPTH] [-ct CRACK_TOP] [-cm CRACK_MIN_SCORE]
+	                      [-cr CRACK_REGEX] [-cc CRACK_CORES]
 	                      [string]
 
 	a tool to identify cryptographic hashes, encodings, and other artifacts in a
@@ -184,8 +186,9 @@ Usage
 
 	optional arguments:
 	  -h, --help            show this help message and exit
-	  -t filters            filter by source of your string. can be: win, web, db,
-	                        unix or other
+	  -t filters            filter by source of your string: one or more (comma
+	                        separated) of win, web, unix, db, personal, crypto,
+	                        other. e.g. -t win,db
 	  -a, -analyze          show more details whenever possible (expands shadow
 	                        files fields,...)
 	  -v, -verbose          verbose mode shows progress status (useful for large
@@ -199,7 +202,7 @@ Usage
 	                        endianess types according to format strings patterns
 	                        as specified on:
 	                        https://docs.python.org/3/library/struct.html
-	  -g GENERATOR, -generator GENERATOR
+	  -g {encode,decode,both}, -generator {encode,decode,both}
 	                        find encoding/decoding algorithm that exposes
 	                        interesting artifacts (choose: 'encode', 'decode',
 	                        'both')
@@ -306,6 +309,22 @@ Notes:
 
 Changelog
 ---------
+
+### Version 0.9.3
+* Sliding window rewritten: windows meet at line boundaries with context on both sides, and each finding is reported by exactly one window, so artifacts crossing a window edge are no longer lost, reported truncated (e.g. half a SHA256 as a SHA1) or reported twice. Memory use no longer grows with the number of findings
+* Locations are exact byte offsets, including in UTF-8 and binary data (undecodable bytes no longer glue neighbouring strings into false matches)
+* `-f` works on pipes and devices (`-f /dev/stdin`), and the `max_file_window_size`/`max_overlap_window_size` configuration settings are honoured
+* SHA1/224/256/384/512, RipeMD-320 and Whirlpool hex digests are detected again, and long digests are no longer split into bogus MD5/MD4 findings
+* Better bcrypt (all `$2*$` variants, cost shown), JWT (header must decode to JSON with `alg`), credit card (Luhn checksum and card brand) and secret detection (fewer false positives, correct locations)
+* SAM files: every account is now detected (previously only the first line of each chunk), `user:rid:*:NTLM` entries are recognised, and SAM findings are no longer reported twice
+* Django hashes are detected on any line of a file, not just the first
+* Repeated phone numbers are reported at every location, not just the first
+* Validators are combined with AND instead of printing a finding once per matching validator; invalid validators get a clear error and `SEARCH` regexes may contain `:`
+* `-t` accepts several filters (`-t win,db`) and rejects unknown ones; `-g` rejects invalid modes
+* `-g` no longer dumps every codec's raw output; it prints only codecs that expose findings (plus a summary)
+* `min_certainty` from a configuration file is honoured when `-m` is not given
+* `-l` lists supported algorithms per filter, including crack mode
+* About 30% faster on large files
 
 ### Version 0.9.2
 * New **crack mode** (`-c`): automatically decodes encodings and classical ciphers, including chains up to 3 layers, and ranks candidates by plausibility. Works with strings, files (`-f`) and stdin (`-s`)
